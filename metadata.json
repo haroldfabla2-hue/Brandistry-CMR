@@ -1,0 +1,8 @@
+{
+  "name": "Brandistry CRM",
+  "description": "A professional, enterprise-grade CRM with AI-powered teams, project management, and Google integration simulations.",
+  "requestFramePermissions": [
+    "microphone",
+    "camera"
+  ]
+}
