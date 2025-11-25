@@ -1,5 +1,4 @@
-
-import { UserRole, ProjectStatus, TaskStatus, IrisTeamMember, AssetStatus, AssetType, Task, Client, Project, Asset, ProjectType, User } from './types';
+import { UserRole, ProjectStatus, TaskStatus, IrisTeamMember, AssetStatus, AssetType, Task, Client, Project, Asset, ProjectType, User, ChatSession } from './types';
 import { 
   BarChart3, PenTool, Code2, LineChart, Briefcase, Scale, 
   BadgeDollarSign, Headset, Clapperboard, Palette, Megaphone,
@@ -8,42 +7,60 @@ import {
 
 export const MOCK_USERS: User[] = [
   {
+    id: 'u_admin_alberto',
+    name: 'Alberto Farah',
+    email: 'alberto.farahb@hotmail.com',
+    password: 'Fbalberto1910',
+    role: UserRole.ADMIN,
+    avatar: 'https://i.pravatar.cc/150?u=alberto',
+    specialty: 'CEO & Founder',
+    accessRequests: []
+  },
+  {
     id: 'u1',
     name: 'Alex Rivera',
     email: 'alex@brandistry.com',
+    password: 'password123',
     role: UserRole.ADMIN,
     avatar: 'https://i.pravatar.cc/150?u=admin',
-    specialty: 'Operations'
+    specialty: 'Operations',
+    accessRequests: []
   },
   {
     id: 'w1',
     name: 'Maria Garcia',
     email: 'maria@brandistry.com',
+    password: 'password123',
     role: UserRole.WORKER,
     avatar: 'https://i.pravatar.cc/150?u=maria',
     specialty: 'Senior Designer',
     assignedProjectIds: ['p1', 'p3'],
-    assignedClientIds: ['c1']
+    assignedClientIds: ['c1'],
+    accessRequests: []
   },
   {
     id: 'w2',
     name: 'James Chen',
     email: 'james@brandistry.com',
+    password: 'password123',
     role: UserRole.WORKER,
     avatar: 'https://i.pravatar.cc/150?u=james',
     specialty: 'Frontend Dev',
     assignedProjectIds: ['p3'],
-    assignedClientIds: []
+    assignedClientIds: [],
+    accessRequests: []
   },
   {
     id: 'c1',
     name: 'Sarah Connor',
     email: 'sarah@ecogoods.com',
+    password: 'password123',
     role: UserRole.CLIENT,
     company: 'EcoGoods',
     avatar: 'https://i.pravatar.cc/150?u=sarah',
     assignedClientIds: ['c1'],
-    assignedProjectIds: ['p2']
+    assignedProjectIds: ['p2'],
+    accessRequests: []
   }
 ];
 
@@ -66,7 +83,8 @@ export const MOCK_CLIENTS: Client[] = [
     phone: '+1 (555) 123-4567',
     industry: 'Retail', 
     status: 'Active', 
-    budgetAllocated: 120000 
+    budgetAllocated: 120000,
+    initialBrief: 'We want to rebrand our entire eco-friendly product line to appeal to Gen Z.'
   },
   { 
     id: 'c2', 
@@ -205,4 +223,17 @@ export const MOCK_ASSETS: Asset[] = [
     comments: [],
     tags: ['copy', 'marketing']
   }
+];
+
+export const MOCK_CHATS: ChatSession[] = [
+    {
+        id: 'chat_demo_1',
+        participants: ['u1', 'w1'],
+        messages: [
+            { id: 'm1', senderId: 'u1', content: 'Hey Maria, how is the Nebula project going?', timestamp: '2023-10-25T10:00:00Z', isRead: true },
+            { id: 'm2', senderId: 'w1', content: 'Going well! Just uploaded the new V1 designs.', timestamp: '2023-10-25T10:05:00Z', isRead: false },
+        ],
+        unreadCount: { 'u1': 1, 'w1': 0 },
+        lastMessage: { id: 'm2', senderId: 'w1', content: 'Going well! Just uploaded the new V1 designs.', timestamp: '2023-10-25T10:05:00Z', isRead: false }
+    }
 ];

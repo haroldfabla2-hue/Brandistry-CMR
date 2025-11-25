@@ -5,10 +5,20 @@ export enum UserRole {
   CLIENT = 'CLIENT'
 }
 
+export type AccessRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+
+export interface AccessRequest {
+  requesterId: string;
+  requesterName: string;
+  timestamp: string;
+  status: AccessRequestStatus;
+}
+
 export interface User {
   id: string;
   name: string;
   email: string;
+  password?: string; // Added for auth simulation
   role: UserRole;
   avatar: string;
   company?: string; // For clients
@@ -16,6 +26,7 @@ export interface User {
   assignedProjectIds?: string[]; // IDs of projects assigned to this worker
   assignedClientIds?: string[]; // IDs of clients assigned to this worker
   hourlyRate?: number;
+  accessRequests: AccessRequest[]; // New field for security
 }
 
 export interface UserPreferences {
@@ -109,6 +120,7 @@ export interface Client {
   industry: string;
   status: 'Active' | 'Lead' | 'Churned';
   budgetAllocated: number; // Total budget across all projects
+  initialBrief?: string; // Added for client onboarding
   notes?: string;
   // Stats (Computed)
   totalProjects?: number;
@@ -125,14 +137,44 @@ export interface IrisTeamMember {
   icon: string;
 }
 
+// --- CHAT SYSTEM TYPES ---
+
 export interface ChatMessage {
   id: string;
-  role: 'user' | 'model';
+  senderId: string; // 'model' for AI, or User ID
   content: string;
-  timestamp: Date;
-  senderName?: string;
+  timestamp: string;
+  isRead: boolean;
+  // For AI Logic
+  role?: 'user' | 'model';
   isOrchestration?: boolean;
   orchestrationSteps?: { step: string; status: 'pending' | 'active' | 'completed' }[];
+}
+
+export interface ChatSession {
+  id: string;
+  participants: string[]; // User IDs
+  lastMessage?: ChatMessage;
+  unreadCount: Record<string, number>; // Map UserId -> Count
+  messages: ChatMessage[];
+  isGroup?: boolean;
+  name?: string; // For Group Chats
+}
+
+// --- IRIS ACTION TYPES ---
+
+export enum IrisActionType {
+  CREATE_TASK = 'CREATE_TASK',
+  DELETE_USER = 'DELETE_USER',
+  ASSIGN_PROJECT = 'ASSIGN_PROJECT',
+  UPDATE_STATUS = 'UPDATE_STATUS',
+  NONE = 'NONE'
+}
+
+export interface IrisAction {
+  type: IrisActionType;
+  payload: any;
+  confirmationText: string;
 }
 
 // --- ASSET MANAGEMENT TYPES ---
@@ -197,4 +239,16 @@ export interface Notification {
   priority: NotificationPriority;
   read: boolean;
   timestamp: string;
+}
+
+// --- GOOGLE INTEGRATION TYPES ---
+
+export interface GoogleFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  thumbnailLink?: string;
+  webViewLink: string;
+  iconLink: string;
+  modifiedTime: string;
 }

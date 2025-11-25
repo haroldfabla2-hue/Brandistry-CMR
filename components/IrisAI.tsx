@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Bot, User, Sparkles, ChevronDown, Activity, CheckCircle2, CircleDashed } from 'lucide-react';
 import { IRIS_TEAMS } from '../constants';
@@ -11,9 +10,11 @@ export const IrisAI: React.FC = () => {
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
+      senderId: 'model',
       role: 'model',
       content: 'Hello Admin. I am the Chief Orchestrator. I can plan complex projects and assign tasks to specialized agents. What do you need done today?',
-      timestamp: new Date()
+      timestamp: new Date().toISOString(),
+      isRead: true
     }
   ]);
   const [inputValue, setInputValue] = useState('');
@@ -33,9 +34,11 @@ export const IrisAI: React.FC = () => {
 
     const userMsg: ChatMessage = {
       id: Date.now().toString(),
+      senderId: user.id,
       role: 'user',
       content: inputValue,
-      timestamp: new Date()
+      timestamp: new Date().toISOString(),
+      isRead: true
     };
 
     setMessages(prev => [...prev, userMsg]);
@@ -51,9 +54,11 @@ export const IrisAI: React.FC = () => {
        const orchId = (Date.now() + 1).toString();
        const orchMsg: ChatMessage = {
           id: orchId,
+          senderId: 'model',
           role: 'model',
           content: 'Orchestrating plan...',
-          timestamp: new Date(),
+          timestamp: new Date().toISOString(),
+          isRead: true,
           isOrchestration: true,
           orchestrationSteps: steps.map((s: any) => ({ step: `[${s.assignedTeam}] ${s.step}`, status: 'pending' }))
        };
@@ -85,20 +90,25 @@ export const IrisAI: React.FC = () => {
        // Final Text Response
        const finalMsg: ChatMessage = {
          id: (Date.now() + 2).toString(),
+         senderId: 'model',
          role: 'model',
          content: text,
-         timestamp: new Date()
+         timestamp: new Date().toISOString(),
+         isRead: true
        };
        setMessages(prev => [...prev, finalMsg]);
     } else {
        // Fallback for simple chat
        const simpleResp = await geminiService.generateResponse(userMsg.content, messages, IRIS_TEAMS[0]);
-       setMessages(prev => [...prev, {
+       const fallbackMsg: ChatMessage = {
          id: (Date.now() + 1).toString(),
+         senderId: 'model',
          role: 'model',
          content: simpleResp,
-         timestamp: new Date()
-       }]);
+         timestamp: new Date().toISOString(),
+         isRead: true
+       };
+       setMessages(prev => [...prev, fallbackMsg]);
     }
 
     setIsThinking(false);

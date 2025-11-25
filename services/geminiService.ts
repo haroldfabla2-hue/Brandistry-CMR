@@ -1,6 +1,6 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { IrisTeamMember, ChatMessage } from "../types";
+import { IrisTeamMember, ChatMessage, IrisAction, IrisActionType } from "../types";
 
 const API_KEY = process.env.API_KEY || '';
 
@@ -15,7 +15,40 @@ class GeminiService {
     }
   }
 
-  // Orchestrator Method
+  // Admin Orchestrator: Map Natural Language to System Actions
+  async analyzeAdminIntent(message: string, context: string): Promise<IrisAction> {
+     if (!this.ai) return { type: IrisActionType.NONE, payload: {}, confirmationText: "API Key Missing" };
+
+     try {
+        const response = await this.ai.models.generateContent({
+           model: 'gemini-2.5-flash',
+           contents: `
+              You are the core operating system of Brandistry CRM. You have admin privileges.
+              Context Data: ${context}
+              
+              User Request: "${message}"
+
+              Analyze the request. If the user wants to perform a system action (Create Task, Delete User, Assign Project, etc.), return a JSON object describing the action.
+              
+              Supported Actions & Formats:
+              1. Create Task: { "type": "CREATE_TASK", "payload": { "title": "...", "assignee": "userId", "projectId": "projectId", "priority": "HIGH" }, "confirmationText": "Create task '...'" }
+              2. Delete User: { "type": "DELETE_USER", "payload": { "userId": "..." }, "confirmationText": "Delete user '...'" }
+              3. General Chat: { "type": "NONE", "payload": {}, "confirmationText": "Response text here..." }
+
+              Return ONLY raw JSON.
+           `,
+           config: { responseMimeType: "application/json" }
+        });
+
+        const text = response.text || '{}';
+        return JSON.parse(text);
+     } catch (e) {
+        console.error("Intent analysis failed", e);
+        return { type: IrisActionType.NONE, payload: {}, confirmationText: "I couldn't understand that command." };
+     }
+  }
+
+  // Orchestrator Method (Standard Planning)
   async orchestrateRequest(message: string): Promise<{ text: string, steps: any[] }> {
     if (!this.ai) return { text: "System Error: API Key missing.", steps: [] };
 
@@ -71,7 +104,7 @@ class GeminiService {
         model: 'gemini-2.5-flash',
         contents: [
             ...context.map(c => ({
-                role: c.role,
+                role: c.role || 'user',
                 parts: [{ text: c.content }]
             })),
             {

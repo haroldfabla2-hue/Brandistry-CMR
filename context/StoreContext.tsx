@@ -1,49 +1,71 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
-  Project, Task, User, Asset, Client, Notification, AssetComment,
-  UserRole, TaskStatus, AssetStatus, AssetType, UserPreferences, SystemSettings, NotificationEvent
+  Project, Task, User, Asset, Client, Notification, AssetComment, ChatSession, ChatMessage, IrisAction, IrisActionType,
+  UserRole, TaskStatus, AssetStatus, AssetType, UserPreferences, SystemSettings, NotificationEvent, AccessRequestStatus
 } from '../types';
 import { 
-  MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ASSETS 
+  MOCK_PROJECTS, MOCK_TASKS, MOCK_USERS, MOCK_CLIENTS, MOCK_ASSETS, MOCK_CHATS
 } from '../constants';
 
 interface StoreContextType {
-  user: User;
+  user: User; 
+  realUser: User | null;
+  isImpersonating: boolean;
   users: User[];
   projects: Project[];
   tasks: Task[];
   assets: Asset[];
   clients: Client[];
   notifications: Notification[];
+  chats: ChatSession[];
+  
   userPreferences: UserPreferences;
   systemSettings: SystemSettings;
+  searchQuery: string;
+  setSearchQuery: (query: string) => void;
+  isAuthenticated: boolean;
   
-  // Actions
+  login: (email: string, password?: string, rememberMe?: boolean) => boolean;
+  logout: () => void;
+  checkAutoLogin: () => Promise<void>;
+  
+  requestUserAccess: (targetUserId: string) => void;
+  resolveAccessRequest: (requesterId: string, status: AccessRequestStatus) => void;
+  startImpersonation: (targetUserId: string) => void;
+  stopImpersonation: () => void;
+
+  registerUser: (newUser: Partial<User>) => void;
+  editUser: (userId: string, updates: Partial<User>) => void;
+  deleteUser: (userId: string) => void;
+  registerClient: (newClient: Partial<Client> & { password?: string }) => void;
+
   updateTaskStatus: (taskId: string, status: TaskStatus) => void;
   addTask: (task: Partial<Task>) => void;
+  updateTask: (taskId: string, updates: Partial<Task>) => void;
+  deleteTask: (taskId: string) => void;
   
   addAsset: (asset: Omit<Asset, 'id' | 'createdAt' | 'status' | 'version' | 'comments' | 'clientId'> & { clientId?: string }) => void;
   updateAssetStatus: (assetId: string, status: AssetStatus) => void;
   addAssetComment: (assetId: string, content: string) => void;
   deleteAsset: (assetId: string) => void;
   
-  // Project Actions
   updateProject: (projectId: string, updates: Partial<Project>) => void;
   assignProjectToWorker: (projectId: string, userId: string) => void;
   
-  switchUserRole: (userId: string) => void;
   markNotificationRead: (id: string) => void;
-  
-  // Settings Actions
   updateUserPreferences: (prefs: Partial<UserPreferences>) => void;
   updateSystemSettings: (settings: Partial<SystemSettings>) => void;
-  
-  // Notification Service
   notify: (event: NotificationEvent) => void;
-  
-  // Computed Helpers
   getAssetsByClient: (clientId: string) => Asset[];
+
+  // Chat Actions
+  createChatSession: (targetUserId: string) => string;
+  sendMessage: (sessionId: string, content: string) => void;
+  markChatRead: (sessionId: string) => void;
+
+  // Iris Actions
+  executeIrisAction: (action: IrisAction) => void;
 }
 
 const StoreContext = createContext<StoreContextType | undefined>(undefined);
@@ -51,55 +73,81 @@ const StoreContext = createContext<StoreContextType | undefined>(undefined);
 export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // --- STATE ---
   const [currentUserIdx, setCurrentUserIdx] = useState(0);
+  const [realUserIdx, setRealUserIdx] = useState<number | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isAuthChecking, setIsAuthChecking] = useState(true);
+  
+  // Initialize with Mock, but then Load from LocalStorage
   const [users, setUsers] = useState<User[]>(MOCK_USERS);
   const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
   const [tasks, setTasks] = useState<Task[]>(MOCK_TASKS);
   const [assets, setAssets] = useState<Asset[]>(MOCK_ASSETS);
   const [clients, setClients] = useState<Client[]>(MOCK_CLIENTS);
   const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [chats, setChats] = useState<ChatSession[]>(MOCK_CHATS);
+  const [searchQuery, setSearchQuery] = useState('');
   
-  // Settings State
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     theme: 'light',
-    dashboardWidgets: {
-      revenue: true,
-      activeProjects: true,
-      teamProductivity: true,
-      systemHealth: true,
-      recentActivity: true
-    },
-    notifications: {
-      email: true,
-      push: true,
-      frequency: 'realtime'
-    }
+    dashboardWidgets: { revenue: true, activeProjects: true, teamProductivity: true, systemHealth: true, recentActivity: true },
+    notifications: { email: true, push: true, frequency: 'realtime' }
   });
 
   const [systemSettings, setSystemSettings] = useState<SystemSettings>({
-    apiKeys: {
-      gemini: '',
-      googleDrive: '',
-      googlePhotos: '',
-      googleSheets: '',
-      googleCalendar: ''
-    },
-    general: {
-      companyName: 'Brandistry CRM',
-      maintenanceMode: false
-    }
+    apiKeys: { gemini: '', googleDrive: '', googlePhotos: '', googleSheets: '', googleCalendar: '' },
+    general: { companyName: 'Brandistry CRM', maintenanceMode: false }
   });
 
   const user = users[currentUserIdx];
+  const realUser = realUserIdx !== null ? users[realUserIdx] : null;
+  const isImpersonating = realUserIdx !== null;
+
+  // --- PERSISTENCE LAYER ---
+  useEffect(() => {
+    // Load Data on Mount
+    const load = (key: string, setter: any, defaultVal: any) => {
+       const saved = localStorage.getItem(`brandistry_${key}`);
+       if (saved) setter(JSON.parse(saved));
+       else setter(defaultVal);
+    };
+
+    load('users', setUsers, MOCK_USERS);
+    load('projects', setProjects, MOCK_PROJECTS);
+    load('tasks', setTasks, MOCK_TASKS);
+    load('assets', setAssets, MOCK_ASSETS);
+    load('chats', setChats, MOCK_CHATS);
+    load('clients', setClients, MOCK_CLIENTS);
+    
+    checkAutoLogin();
+  }, []);
+
+  // Save Data on Change (Debounced ideally, but simple here)
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_users', JSON.stringify(users)); }, [users, isAuthChecking]);
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_projects', JSON.stringify(projects)); }, [projects, isAuthChecking]);
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_tasks', JSON.stringify(tasks)); }, [tasks, isAuthChecking]);
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_assets', JSON.stringify(assets)); }, [assets, isAuthChecking]);
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_chats', JSON.stringify(chats)); }, [chats, isAuthChecking]);
+  useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_clients', JSON.stringify(clients)); }, [clients, isAuthChecking]);
+
+  const checkAutoLogin = async () => {
+    const savedUserEmail = localStorage.getItem('brandistry_auth_email');
+    if (savedUserEmail) {
+      // Small delay to ensure users are loaded from localstorage first
+      await new Promise(r => setTimeout(r, 100)); 
+      const idx = users.findIndex(u => u.email === savedUserEmail);
+      if (idx !== -1) {
+        setCurrentUserIdx(idx);
+        setIsAuthenticated(true);
+      }
+    }
+    setIsAuthChecking(false);
+  };
 
   // --- DERIVED STATE CALCULATIONS (REAL-TIME DB VIEWS) ---
-  
-  // Automatically calculate Client Stats whenever assets or projects change
   useEffect(() => {
     setClients(prevClients => prevClients.map(client => {
       const clientProjects = projects.filter(p => p.clientId === client.id);
       const activeProjs = clientProjects.filter(p => p.status === 'ACTIVE').length;
-      
-      // Count DELIVERED assets for this client
       const deliveredCount = assets.filter(a => a.clientId === client.id && a.status === AssetStatus.DELIVERED).length;
 
       return {
@@ -111,37 +159,27 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     }));
   }, [assets, projects]);
 
-
-  // --- SMART NOTIFICATION SERVICE ---
+  // --- NOTIFICATION SERVICE ---
   const notify = (event: NotificationEvent) => {
-    // 1. FILTER: Ignore Low Priority events globally to reduce noise
     if (event.priority === 'LOW') return;
 
-    // 2. FILTER: Relevance Check
     let isRelevant = false;
-
-    // Direct match
-    if (event.targetUserId && event.targetUserId === user.id) isRelevant = true;
+    const target = realUser || user;
     
-    // Role match
-    if (event.targetRoleId && event.targetRoleId === user.role) isRelevant = true;
-    
-    // Project Team match
+    if (event.targetUserId && event.targetUserId === target.id) isRelevant = true;
+    if (event.targetRoleId && event.targetRoleId === target.role) isRelevant = true;
     if (event.projectId) {
       const project = projects.find(p => p.id === event.projectId);
-      if (project && (project.team.includes(user.id) || user.role === UserRole.ADMIN)) {
+      if (project && (project.team.includes(target.id) || target.role === UserRole.ADMIN)) {
         isRelevant = true;
       }
     }
-
-    // Default: Info/Warning/Critical events are usually relevant if no specific target is set
     if (!event.targetUserId && !event.targetRoleId && !event.projectId) {
        isRelevant = true;
     }
 
     if (!isRelevant) return;
 
-    // 3. Add to State
     const newNotif: Notification = {
       id: `n${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
       title: event.title,
@@ -151,62 +189,178 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       read: false,
       timestamp: new Date().toISOString()
     };
-    
-    // Keep max 10 notifications
     setNotifications(prev => [newNotif, ...prev].slice(0, 10));
   };
 
-  // --- ACTIONS ---
+  // --- AUTH ACTIONS ---
+  const login = (email: string, password?: string, rememberMe: boolean = false) => {
+    const idx = users.findIndex(u => u.email === email);
+    if (idx !== -1) {
+      setCurrentUserIdx(idx);
+      setIsAuthenticated(true);
+      if (rememberMe) localStorage.setItem('brandistry_auth_email', email);
+      else localStorage.removeItem('brandistry_auth_email');
+      return true;
+    }
+    return false;
+  };
 
-  const updateTaskStatus = (taskId: string, status: TaskStatus) => {
-    const task = tasks.find(t => t.id === taskId);
-    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
-    
-    if (status === TaskStatus.DONE && task) {
-      notify({
-        title: 'Task Completed',
-        message: `Task "${task.title}" marked as done.`,
-        type: 'success',
-        priority: 'HIGH',
-        projectId: task.projectId
-      });
+  const logout = () => {
+    setIsAuthenticated(false);
+    setRealUserIdx(null);
+    localStorage.removeItem('brandistry_auth_email');
+    setCurrentUserIdx(0);
+  };
+
+  // --- ACCESS CONTROL ---
+  const requestUserAccess = (targetUserId: string) => {
+    const activeAdmin = realUser || user;
+    if (activeAdmin.role !== UserRole.ADMIN) return;
+
+    setUsers(prev => prev.map(u => {
+       if (u.id === targetUserId) {
+          if (u.accessRequests?.some(r => r.requesterId === activeAdmin.id)) return u;
+          const newRequest = {
+             requesterId: activeAdmin.id,
+             requesterName: activeAdmin.name,
+             timestamp: new Date().toISOString(),
+             status: 'PENDING'
+          } as const;
+          return { ...u, accessRequests: [...(u.accessRequests || []), newRequest] };
+       }
+       return u;
+    }));
+
+    notify({ title: 'Access Requested', message: `Admin ${activeAdmin.name} requested access.`, type: 'warning', priority: 'HIGH', targetUserId: targetUserId });
+  };
+
+  const resolveAccessRequest = (requesterId: string, status: AccessRequestStatus) => {
+     setUsers(prev => prev.map(u => {
+        if (u.id === user.id) {
+           return { ...u, accessRequests: u.accessRequests.map(r => r.requesterId === requesterId ? { ...r, status } : r) };
+        }
+        return u;
+     }));
+     notify({ title: `Access ${status}`, message: `${user.name} responded to your request.`, type: status === 'APPROVED' ? 'success' : 'error', priority: 'HIGH', targetUserId: requesterId });
+  };
+
+  const startImpersonation = (targetUserId: string) => {
+    const admin = realUser || user;
+    if (admin.role !== UserRole.ADMIN) return;
+
+    const targetIdx = users.findIndex(u => u.id === targetUserId);
+    const targetUser = users[targetIdx];
+    const request = targetUser.accessRequests?.find(r => r.requesterId === admin.id);
+    const hasPermission = request?.status === 'APPROVED';
+
+    if (hasPermission || targetUserId === admin.id) {
+       setRealUserIdx(currentUserIdx);
+       setCurrentUserIdx(targetIdx);
+       notify({ title: 'Impersonation Started', message: `Viewing as ${targetUser.name}`, type: 'info', priority: 'MEDIUM' });
+    } else {
+       notify({ title: 'Access Denied', message: 'Need approval first.', type: 'error', priority: 'HIGH' });
     }
   };
 
+  const stopImpersonation = () => {
+     if (realUserIdx !== null) {
+        setCurrentUserIdx(realUserIdx);
+        setRealUserIdx(null);
+     }
+  };
+
+  // --- USER MANAGEMENT ---
+  const registerUser = (newUser: Partial<User>) => {
+    const newUserRecord: User = {
+        id: `u_${Date.now()}`,
+        name: newUser.name || 'New User',
+        email: newUser.email || '',
+        password: newUser.password || 'password123',
+        role: newUser.role || UserRole.WORKER,
+        avatar: `https://i.pravatar.cc/150?u=${Date.now()}`,
+        specialty: newUser.specialty || '',
+        accessRequests: [],
+        ...newUser
+    } as User;
+    setUsers(prev => [...prev, newUserRecord]);
+    notify({ title: 'User Registered', message: `Welcome ${newUserRecord.name}!`, type: 'success', priority: 'MEDIUM' });
+  };
+
+  const editUser = (userId: string, updates: Partial<User>) => {
+     setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
+     notify({ title: 'User Updated', message: 'Profile updated successfully.', type: 'info', priority: 'MEDIUM' });
+  };
+
+  const deleteUser = (userId: string) => {
+     setUsers(prev => prev.filter(u => u.id !== userId));
+     notify({ title: 'User Deleted', message: 'User removed from system.', type: 'warning', priority: 'HIGH' });
+  };
+
+  const registerClient = (newClient: Partial<Client> & { password?: string }) => {
+     const client: Client = {
+         id: `c_${Date.now()}`,
+         name: newClient.name || 'Contact',
+         company: newClient.company || 'New Company',
+         email: newClient.email || '',
+         phone: newClient.phone || '',
+         industry: newClient.industry || 'General',
+         status: 'Active',
+         budgetAllocated: newClient.budgetAllocated || 0,
+         initialBrief: newClient.initialBrief || '',
+         notes: '',
+         ...newClient
+     } as Client;
+     setClients(prev => [...prev, client]);
+
+     const clientUser: User = {
+        id: `u_client_${client.id}`,
+        name: client.name,
+        email: client.email,
+        password: newClient.password || 'password123',
+        role: UserRole.CLIENT,
+        avatar: `https://i.pravatar.cc/150?u=${client.id}`,
+        company: client.company,
+        assignedClientIds: [client.id],
+        specialty: 'Client Contact',
+        accessRequests: []
+     };
+     setUsers(prev => [...prev, clientUser]);
+     
+     notify({ title: 'Client Onboarded', message: `${client.company} added.`, type: 'success', priority: 'HIGH' });
+  };
+
+  // --- TASK ACTIONS ---
+  const updateTaskStatus = (taskId: string, status: TaskStatus) => {
+    setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status } : t));
+  };
   const addTask = (newTask: Partial<Task>) => {
     const task: Task = {
       id: `t${Date.now()}`,
       title: newTask.title || 'New Task',
       description: newTask.description || '',
-      projectId: newTask.projectId || '1',
+      projectId: newTask.projectId || projects[0]?.id || 'p1',
       assignee: newTask.assignee || user.id,
-      status: TaskStatus.TODO,
+      status: newTask.status || TaskStatus.TODO,
       priority: newTask.priority || 'MEDIUM',
       dueDate: newTask.dueDate || new Date().toISOString(),
       generatedByAI: newTask.generatedByAI
     };
     setTasks(prev => [...prev, task]);
-    
-    notify({
-      title: 'Task Assigned',
-      message: `You have been assigned: "${task.title}"`,
-      type: 'info',
-      priority: 'MEDIUM',
-      targetUserId: task.assignee
-    });
+    notify({ title: 'Task Created', message: `"${task.title}" added.`, type: 'success', priority: 'MEDIUM', projectId: task.projectId });
   };
+  const updateTask = (taskId: string, updates: Partial<Task>) => setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updates } : t));
+  const deleteTask = (taskId: string) => setTasks(prev => prev.filter(t => t.id !== taskId));
 
-  const addAsset = (newAsset: Omit<Asset, 'id' | 'createdAt' | 'status' | 'version' | 'comments' | 'clientId'> & { clientId?: string }) => {
-    // If clientId is missing, look it up from projectId
+  // --- ASSET ACTIONS ---
+  const addAsset = (newAsset: any) => {
     let clientId = newAsset.clientId;
     if (!clientId) {
         const project = projects.find(p => p.id === newAsset.projectId);
         clientId = project ? project.clientId : '';
     }
-
     const asset: Asset = {
       ...newAsset,
-      clientId: clientId || '', // Ensure string
+      clientId: clientId || '', 
       id: `a${Date.now()}`,
       createdAt: new Date().toISOString(),
       status: AssetStatus.DRAFT,
@@ -215,140 +369,122 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       tags: newAsset.tags || []
     };
     setAssets(prev => [asset, ...prev]);
-    
-    notify({
-      title: 'New Asset Uploaded',
-      message: `${asset.title} was uploaded to Project.`,
-      type: 'success',
-      priority: 'HIGH',
-      projectId: asset.projectId
-    });
+    notify({ title: 'Asset Uploaded', message: `${asset.title} added.`, type: 'success', priority: 'HIGH', projectId: asset.projectId });
   };
-
   const updateAssetStatus = (assetId: string, status: AssetStatus) => {
-    const asset = assets.find(a => a.id === assetId);
-    setAssets(prev => prev.map(a => 
-      a.id === assetId ? { ...a, status } : a
-    ));
-    
-    if (asset) {
-      const isDelivered = status === AssetStatus.DELIVERED;
-      const isRejection = status === AssetStatus.REJECTED || status === AssetStatus.CHANGES_REQUESTED;
-      
-      notify({
-        title: `Asset ${status.replace('_', ' ')}`,
-        message: `Status updated for: ${asset.title}`,
-        type: isDelivered ? 'success' : isRejection ? 'warning' : 'info',
-        priority: isDelivered || isRejection ? 'CRITICAL' : 'MEDIUM',
-        projectId: asset.projectId
-      });
-    }
+    setAssets(prev => prev.map(a => a.id === assetId ? { ...a, status } : a));
   };
-
   const addAssetComment = (assetId: string, content: string) => {
-    const newComment: AssetComment = {
-      id: `c${Date.now()}`,
-      userId: user.id,
-      userName: user.name,
-      content,
-      timestamp: new Date().toISOString()
-    };
-    
-    setAssets(prev => prev.map(a => 
-      a.id === assetId ? { ...a, comments: [...a.comments, newComment] } : a
-    ));
-    
-    const asset = assets.find(a => a.id === assetId);
-    if (asset) {
-       // Notify everyone on the project EXCEPT the commenter
-       notify({
-         title: 'New Comment',
-         message: `${user.name} commented on ${asset.title}`,
-         type: 'info',
-         priority: 'MEDIUM',
-         projectId: asset.projectId
-       });
-    }
+    const newComment: AssetComment = { id: `c${Date.now()}`, userId: user.id, userName: user.name, content, timestamp: new Date().toISOString() };
+    setAssets(prev => prev.map(a => a.id === assetId ? { ...a, comments: [...a.comments, newComment] } : a));
   };
+  const deleteAsset = (assetId: string) => setAssets(prev => prev.filter(a => a.id !== assetId));
 
-  const deleteAsset = (assetId: string) => {
-    setAssets(prev => prev.filter(a => a.id !== assetId));
-  };
-
-  const updateProject = (projectId: string, updates: Partial<Project>) => {
-    setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
-    notify({
-        title: 'Project Updated',
-        message: `Configuration changed for project.`,
-        type: 'info',
-        priority: 'MEDIUM',
-        projectId: projectId
-    });
-  };
-
+  // --- PROJECT ACTIONS ---
+  const updateProject = (projectId: string, updates: Partial<Project>) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
   const assignProjectToWorker = (projectId: string, userId: string) => {
-    setProjects(prev => prev.map(p => p.id === projectId && !p.team.includes(userId) 
-      ? { ...p, team: [...p.team, userId] } : p
-    ));
-    setUsers(prev => prev.map(u => u.id === userId && !u.assignedProjectIds?.includes(projectId)
-      ? { ...u, assignedProjectIds: [...(u.assignedProjectIds || []), projectId] } : u
-    ));
-    
-    notify({
-      title: 'New Project Assignment',
-      message: 'You have been added to a new project team.',
-      type: 'success',
-      priority: 'HIGH',
-      targetUserId: userId
-    });
+    setProjects(prev => prev.map(p => p.id === projectId && !p.team.includes(userId) ? { ...p, team: [...p.team, userId] } : p));
+    setUsers(prev => prev.map(u => u.id === userId && !u.assignedProjectIds?.includes(projectId) ? { ...u, assignedProjectIds: [...(u.assignedProjectIds || []), projectId] } : u));
   };
 
-  const switchUserRole = (targetId: string) => {
-    const idx = users.findIndex(u => u.id === targetId);
-    if (idx !== -1) setCurrentUserIdx(idx);
+  const markNotificationRead = (id: string) => setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const updateUserPreferences = (prefs: Partial<UserPreferences>) => setUserPreferences(prev => ({...prev, ...prefs}));
+  const updateSystemSettings = (settings: Partial<SystemSettings>) => setSystemSettings(prev => ({...prev, ...settings}));
+  const getAssetsByClient = (clientId: string) => assets.filter(a => a.clientId === clientId);
+
+  // --- CHAT SYSTEM ---
+  const createChatSession = (targetUserId: string): string => {
+     // Check if existing session
+     const existing = chats.find(c => !c.isGroup && c.participants.includes(user.id) && c.participants.includes(targetUserId));
+     if (existing) return existing.id;
+
+     const newSession: ChatSession = {
+        id: `chat_${Date.now()}`,
+        participants: [user.id, targetUserId],
+        unreadCount: { [targetUserId]: 0, [user.id]: 0 },
+        messages: []
+     };
+     setChats(prev => [newSession, ...prev]);
+     return newSession.id;
   };
 
-  const markNotificationRead = (id: string) => {
-    setNotifications(prev => prev.map(n => n.id === id ? { ...n, read: true } : n));
+  const sendMessage = (sessionId: string, content: string) => {
+     const newMessage: ChatMessage = {
+        id: `m_${Date.now()}`,
+        senderId: user.id,
+        content,
+        timestamp: new Date().toISOString(),
+        isRead: false
+     };
+     
+     setChats(prev => prev.map(c => {
+        if (c.id === sessionId) {
+           const updatedUnread = { ...c.unreadCount };
+           c.participants.forEach(pId => {
+              if (pId !== user.id) updatedUnread[pId] = (updatedUnread[pId] || 0) + 1;
+           });
+           return {
+              ...c,
+              messages: [...c.messages, newMessage],
+              lastMessage: newMessage,
+              unreadCount: updatedUnread
+           };
+        }
+        return c;
+     }));
   };
 
-  const updateUserPreferences = (prefs: Partial<UserPreferences>) => {
-    setUserPreferences(prev => ({...prev, ...prefs}));
+  const markChatRead = (sessionId: string) => {
+     setChats(prev => prev.map(c => {
+        if (c.id === sessionId) {
+           return {
+              ...c,
+              unreadCount: { ...c.unreadCount, [user.id]: 0 },
+              messages: c.messages.map(m => m.senderId !== user.id ? { ...m, isRead: true } : m)
+           };
+        }
+        return c;
+     }));
   };
 
-  const updateSystemSettings = (settings: Partial<SystemSettings>) => {
-    setSystemSettings(prev => ({...prev, ...settings}));
+  // --- IRIS EXECUTOR ---
+  const executeIrisAction = (action: IrisAction) => {
+     switch (action.type) {
+        case IrisActionType.CREATE_TASK:
+           addTask(action.payload);
+           break;
+        case IrisActionType.DELETE_USER:
+           deleteUser(action.payload.userId);
+           break;
+        case IrisActionType.ASSIGN_PROJECT:
+           assignProjectToWorker(action.payload.projectId, action.payload.userId);
+           break;
+        case IrisActionType.UPDATE_STATUS:
+           updateTaskStatus(action.payload.taskId, action.payload.status);
+           break;
+        default:
+           break;
+     }
+     notify({
+        title: 'Iris Action Executed',
+        message: action.confirmationText,
+        type: 'info',
+        priority: 'MEDIUM'
+     });
   };
-  
-  const getAssetsByClient = (clientId: string) => {
-      return assets.filter(a => a.clientId === clientId);
-  };
+
+  if (isAuthChecking) return null; 
 
   return (
     <StoreContext.Provider value={{
-      user,
-      users,
-      projects,
-      tasks,
-      assets,
-      clients,
-      notifications,
-      userPreferences,
-      systemSettings,
-      updateTaskStatus,
-      addTask,
-      addAsset,
-      updateAssetStatus,
-      addAssetComment,
-      deleteAsset,
-      updateProject,
-      assignProjectToWorker,
-      switchUserRole,
-      markNotificationRead,
-      updateUserPreferences,
-      updateSystemSettings,
-      notify,
-      getAssetsByClient
+      user, realUser, isImpersonating, users, projects, tasks, assets, clients, notifications, chats,
+      userPreferences, systemSettings, searchQuery, setSearchQuery, isAuthenticated,
+      login, logout, checkAutoLogin, requestUserAccess, resolveAccessRequest, startImpersonation, stopImpersonation,
+      registerUser, editUser, deleteUser, registerClient,
+      updateTaskStatus, addTask, updateTask, deleteTask,
+      addAsset, updateAssetStatus, addAssetComment, deleteAsset,
+      updateProject, assignProjectToWorker, markNotificationRead, updateUserPreferences, updateSystemSettings, notify, getAssetsByClient,
+      createChatSession, sendMessage, markChatRead, executeIrisAction
     }}>
       {children}
     </StoreContext.Provider>
@@ -357,8 +493,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
 
 export const useStore = () => {
   const context = useContext(StoreContext);
-  if (!context) {
-    throw new Error('useStore must be used within a StoreProvider');
-  }
+  if (!context) throw new Error('useStore must be used within a StoreProvider');
   return context;
 };
