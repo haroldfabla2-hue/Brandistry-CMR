@@ -155,7 +155,17 @@ const App: React.FC = () => {
           </div>
         </header>
 
-        <div className="flex-1 overflow-auto p-6 relative z-10 custom-scroll">
+        {/* 
+            CRITICAL FIX: 
+            For ChatView and FilesView to manage their own internal scrolling correctly, 
+            the parent container MUST NOT have 'overflow-auto' and MUST have 'overflow-hidden'.
+            Also removing padding for Chat to allow full-width design.
+        */}
+        <div className={`flex-1 relative z-10 custom-scroll ${
+          (activeView === View.MESSAGES || activeView === View.FILES) 
+            ? 'overflow-hidden p-0' 
+            : 'overflow-auto p-6'
+        }`}>
           {activeView === View.DASHBOARD && <Dashboard user={user} projects={projects} tasks={tasks} assets={useStore().assets} />}
           {activeView === View.MESSAGES && <ChatView />}
           {activeView === View.CLIENTS && user.role === UserRole.ADMIN && <ClientView />}

@@ -49,12 +49,10 @@ const AdminDashboard = ({ projects, tasks, assets, users }: { projects: Project[
     // Revenue by Client (Top 4)
     const clientRevenue: Record<string, number> = {};
     projects.forEach(p => {
-       // Find client name via store would be better, but assuming we have logic or denormalized
-       // For now group by clientId
        clientRevenue[p.clientId] = (clientRevenue[p.clientId] || 0) + p.budget;
     });
     const pieData = Object.entries(clientRevenue).map(([name, value], idx) => ({
-       name: `Client ${name.substring(0,4)}...`, // Truncated ID for display if name unavailable
+       name: `Client ${name.substring(0,4)}...`, 
        value
     })).sort((a,b) => b.value - a.value).slice(0, 5);
 
@@ -80,14 +78,13 @@ const AdminDashboard = ({ projects, tasks, assets, users }: { projects: Project[
            highPriority,
            avatar: worker.avatar
         };
-     }).sort((a,b) => b.active - a.active); // Sort by most active load
+     }).sort((a,b) => b.active - a.active); 
   }, [users, tasks]);
 
   // 3. Operational Metrics
   const activeProjects = projects.filter(p => p.status === 'ACTIVE').length;
   const totalAssetsDelivered = assets.filter(a => a.status === AssetStatus.DELIVERED).length;
 
-  // Colors for charts
   const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899'];
 
   return (
@@ -158,7 +155,8 @@ const AdminDashboard = ({ projects, tasks, assets, users }: { projects: Project[
                 </div>
              </div>
              
-             <div className="flex-1 min-h-[300px]">
+             {/* CRITICAL FIX: Explicit Height for Recharts */}
+             <div className="h-[400px] w-full">
                <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={teamStats} layout="vertical" margin={{ left: 40, right: 20 }}>
                      <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
@@ -223,7 +221,8 @@ const AdminDashboard = ({ projects, tasks, assets, users }: { projects: Project[
            </div>
 
            {/* Client Distribution Pie */}
-           <div className="flex-1 min-h-[200px] relative">
+           {/* CRITICAL FIX: Explicit Height for Recharts */}
+           <div className="h-[300px] w-full relative">
               <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Revenue by Client</h4>
               <ResponsiveContainer width="100%" height="100%">
                  <PieChart>

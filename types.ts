@@ -152,6 +152,7 @@ export interface ChatMessage {
   content: string; // Fallback text or main text
   timestamp: string;
   isRead: boolean;
+  isEdited?: boolean; // New Flag
   role?: 'user' | 'model';
   isOrchestration?: boolean;
   orchestrationSteps?: { step: string; status: 'pending' | 'active' | 'completed' }[];

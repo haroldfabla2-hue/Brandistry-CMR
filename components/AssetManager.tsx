@@ -1,13 +1,15 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../context/StoreContext';
-import { AssetStatus, AssetType, UserRole, Asset } from '../types';
+import { AssetStatus, AssetType, UserRole, Asset, GoogleFile } from '../types';
 import { 
   FileImage, FileVideo, FileText, CheckCircle, XCircle, 
   Upload, MessageSquare, History, Trash2, LayoutGrid, List,
-  Send, AlertCircle, ChevronRight, Download, Eye, BarChart3, Image
+  Send, AlertCircle, ChevronRight, Download, Eye, BarChart3, Image,
+  Laptop, Cloud, Link as LinkIcon, Loader2, FileUp, Folder
 } from 'lucide-react';
 import { AssetAnalytics } from './AssetAnalytics';
+import { googleDriveService } from '../services/googleDriveService';
 
 export const AssetManager: React.FC = () => {
   const { assets, projects, user, addAsset, updateAssetStatus, deleteAsset, addAssetComment, notify } = useStore();
@@ -334,58 +336,205 @@ const getStatusColor = (status: AssetStatus) => {
 };
 
 const UploadModal = ({ projects, onClose, onUpload }: any) => {
+  const [activeTab, setActiveTab] = useState<'device' | 'drive' | 'link'>('device');
   const [form, setForm] = useState({
     title: '',
     projectId: projects[0]?.id || '',
     type: AssetType.IMAGE,
-    url: 'https://picsum.photos/seed/new/800/600'
+    url: ''
   });
+  const [driveFiles, setDriveFiles] = useState<GoogleFile[]>([]);
+  const [isLoadingDrive, setIsLoadingDrive] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (activeTab === 'drive') {
+      loadDriveFiles();
+    }
+  }, [activeTab]);
+
+  const loadDriveFiles = async () => {
+    setIsLoadingDrive(true);
+    try {
+      if (!googleDriveService.isAuthenticated) {
+         try {
+           await googleDriveService.signIn();
+         } catch(e) {
+           console.log("Sign in cancelled or failed", e);
+           setIsLoadingDrive(false);
+           return;
+         }
+      }
+      const files = await googleDriveService.listFiles();
+      setDriveFiles(files || []);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsLoadingDrive(false);
+    }
+  };
+
+  const handleDeviceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+     const file = e.target.files?.[0];
+     if (file) {
+        setForm(prev => ({ 
+           ...prev, 
+           title: file.name.split('.')[0],
+           type: file.type.startsWith('video') ? AssetType.VIDEO : file.type.includes('pdf') ? AssetType.DOCUMENT : AssetType.IMAGE 
+        }));
+
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+           const result = ev.target?.result as string;
+           setForm(prev => ({ ...prev, url: result }));
+           if (file.type.startsWith('image')) setPreview(result);
+           else setPreview(null);
+        };
+        reader.readAsDataURL(file);
+     }
+  };
+
+  const selectDriveFile = (file: GoogleFile) => {
+     setForm(prev => ({
+        ...prev,
+        title: file.name,
+        url: file.webViewLink,
+        type: file.mimeType.includes('image') ? AssetType.IMAGE : file.mimeType.includes('video') ? AssetType.VIDEO : AssetType.DOCUMENT
+     }));
+     setPreview(file.thumbnailLink || null);
+  };
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in-95 duration-200">
-        <h2 className="text-xl font-bold text-slate-800 mb-4">Upload New Asset</h2>
-        <form onSubmit={(e) => { e.preventDefault(); onUpload(form); }} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Asset Title</label>
-            <input 
-              required
-              type="text" 
-              className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
-              value={form.title}
-              onChange={e => setForm({...form, title: e.target.value})}
-              autoFocus
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Project</label>
-            <select 
-              className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
-              value={form.projectId}
-              onChange={e => setForm({...form, projectId: e.target.value})}
-            >
-              {projects.map((p: any) => (
-                <option key={p.id} value={p.id}>{p.name}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1">Type</label>
-            <select 
-              className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none transition-all"
-              value={form.type}
-              onChange={e => setForm({...form, type: e.target.value as AssetType})}
-            >
-              <option value={AssetType.IMAGE}>Image</option>
-              <option value={AssetType.VIDEO}>Video</option>
-              <option value={AssetType.DOCUMENT}>Document</option>
-            </select>
-          </div>
-          <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose} className="flex-1 py-2 text-slate-600 hover:bg-slate-50 rounded-lg text-sm transition-colors">Cancel</button>
-            <button type="submit" className="flex-1 py-2 bg-brand-600 text-white rounded-lg text-sm hover:bg-brand-700 font-medium transition-colors">Upload Asset</button>
-          </div>
-        </form>
+      <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-0 flex flex-col max-h-[90vh] overflow-hidden">
+        {/* Header */}
+        <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+           <div>
+              <h2 className="text-xl font-bold text-slate-800">Upload New Asset</h2>
+              <p className="text-xs text-slate-500">Add deliverables to your project.</p>
+           </div>
+           
+           <div className="flex bg-white rounded-lg p-1 border border-slate-200 shadow-sm">
+              <button onClick={() => setActiveTab('device')} className={`p-2 rounded transition-colors ${activeTab === 'device' ? 'bg-brand-100 text-brand-600' : 'text-slate-400 hover:text-slate-600'}`} title="From Device"><Laptop size={18}/></button>
+              <button onClick={() => setActiveTab('drive')} className={`p-2 rounded transition-colors ${activeTab === 'drive' ? 'bg-brand-100 text-brand-600' : 'text-slate-400 hover:text-slate-600'}`} title="Google Drive"><Cloud size={18}/></button>
+              <button onClick={() => setActiveTab('link')} className={`p-2 rounded transition-colors ${activeTab === 'link' ? 'bg-brand-100 text-brand-600' : 'text-slate-400 hover:text-slate-600'}`} title="External Link"><LinkIcon size={18}/></button>
+           </div>
+        </div>
+
+        {/* Content */}
+        <div className="p-6 overflow-y-auto custom-scroll flex-1">
+           {activeTab === 'device' && (
+              <div className="border-2 border-dashed border-slate-300 rounded-xl p-8 flex flex-col items-center justify-center text-center hover:bg-slate-50 transition-colors relative">
+                 <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleDeviceFile}/>
+                 <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4"><FileUp size={32}/></div>
+                 <h3 className="text-lg font-bold text-slate-700">Drag & Drop or Click to Upload</h3>
+                 <p className="text-sm text-slate-500 mt-1">Supports JPG, PNG, PDF, MP4</p>
+                 {form.url && <div className="mt-4 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full flex items-center gap-2"><CheckCircle size={12}/> File Selected</div>}
+              </div>
+           )}
+
+           {activeTab === 'drive' && (
+              <div className="space-y-4">
+                 <h3 className="text-sm font-bold text-slate-700">Select from Google Drive</h3>
+                 {isLoadingDrive ? (
+                    <div className="flex justify-center py-8"><Loader2 className="animate-spin text-brand-500"/></div>
+                 ) : (
+                    <div className="grid grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-2 custom-scroll">
+                       {driveFiles.map(file => (
+                          <div 
+                            key={file.id} 
+                            onClick={() => selectDriveFile(file)}
+                            className={`p-2 border rounded-lg cursor-pointer hover:shadow-md transition-all ${form.url === file.webViewLink ? 'border-brand-500 bg-brand-50 ring-1 ring-brand-500' : 'border-slate-200 bg-white'}`}
+                          >
+                             <div className="h-16 bg-slate-100 rounded mb-2 overflow-hidden flex items-center justify-center">
+                                {file.thumbnailLink ? <img src={file.thumbnailLink} className="w-full h-full object-cover"/> : <Folder className="text-blue-300"/>}
+                             </div>
+                             <p className="text-xs font-medium text-slate-700 truncate">{file.name}</p>
+                          </div>
+                       ))}
+                       {driveFiles.length === 0 && <p className="col-span-3 text-center text-sm text-slate-400 py-4">No files found or not signed in.</p>}
+                    </div>
+                 )}
+              </div>
+           )}
+
+           {activeTab === 'link' && (
+              <div className="space-y-4">
+                 <label className="block text-sm font-medium text-slate-700">External URL</label>
+                 <div className="flex gap-2">
+                    <input 
+                      type="url" 
+                      placeholder="https://..." 
+                      className="flex-1 border border-slate-300 rounded-lg p-2.5 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                      value={form.url}
+                      onChange={e => setForm({...form, url: e.target.value})}
+                    />
+                 </div>
+              </div>
+           )}
+
+           {/* Metadata Form */}
+           <div className="mt-6 space-y-4 border-t border-slate-100 pt-6">
+              <div className="grid grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Asset Title</label>
+                    <input 
+                      required
+                      className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                      value={form.title}
+                      onChange={e => setForm({...form, title: e.target.value})}
+                      placeholder="e.g. Q4 Marketing Banner"
+                    />
+                 </div>
+                 <div>
+                    <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Project</label>
+                    <select 
+                      className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                      value={form.projectId}
+                      onChange={e => setForm({...form, projectId: e.target.value})}
+                    >
+                      {projects.map((p: any) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                 </div>
+              </div>
+              <div>
+                 <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Asset Type</label>
+                 <select 
+                    className="w-full border border-slate-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-brand-500 outline-none"
+                    value={form.type}
+                    onChange={e => setForm({...form, type: e.target.value as AssetType})}
+                 >
+                    <option value={AssetType.IMAGE}>Image</option>
+                    <option value={AssetType.VIDEO}>Video</option>
+                    <option value={AssetType.DOCUMENT}>Document</option>
+                 </select>
+              </div>
+
+              {preview && activeTab !== 'link' && (
+                 <div className="bg-slate-50 rounded-lg p-3 border border-slate-200 flex items-center gap-4">
+                    <img src={preview} className="w-12 h-12 object-cover rounded bg-white border border-slate-200" alt="Preview"/>
+                    <div className="text-xs">
+                       <p className="font-bold text-slate-700">Ready to Upload</p>
+                       <p className="text-slate-500">{form.title}</p>
+                    </div>
+                 </div>
+              )}
+           </div>
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 bg-slate-50 border-t border-slate-200 flex gap-3 justify-end">
+           <button onClick={onClose} className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg text-sm font-medium transition-colors">Cancel</button>
+           <button 
+             onClick={(e) => { e.preventDefault(); onUpload(form); }} 
+             disabled={!form.url || !form.title}
+             className="px-6 py-2 bg-brand-600 text-white rounded-lg text-sm font-bold hover:bg-brand-700 transition-colors shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+           >
+              Upload Asset
+           </button>
+        </div>
       </div>
     </div>
   );

@@ -61,9 +61,13 @@ interface StoreContextType {
 
   // Chat Actions
   createChatSession: (targetUserId: string) => string;
+  createGroupSession: (name: string, participantIds: string[]) => string;
   updateChatSession: (sessionId: string, updates: Partial<ChatSession>) => void;
   sendMessage: (sessionId: string, content: string, blocks?: MessageBlock[]) => void;
+  editMessage: (sessionId: string, messageId: string, newContent: string) => void;
+  deleteMessage: (sessionId: string, messageId: string) => void;
   markChatRead: (sessionId: string) => void;
+  toggleChatReadStatus: (sessionId: string) => void;
 
   // Iris Actions
   executeIrisAction: (action: IrisAction) => void;
@@ -122,7 +126,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     checkAutoLogin();
   }, []);
 
-  // Save Data on Change (Debounced ideally, but simple here)
+  // Save Data on Change
   useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_users', JSON.stringify(users)); }, [users, isAuthChecking]);
   useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_projects', JSON.stringify(projects)); }, [projects, isAuthChecking]);
   useEffect(() => { if(!isAuthChecking) localStorage.setItem('brandistry_tasks', JSON.stringify(tasks)); }, [tasks, isAuthChecking]);
@@ -408,6 +412,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
      return newSession.id;
   };
 
+  const createGroupSession = (name: string, participantIds: string[]): string => {
+      const newSession: ChatSession = {
+          id: `group_${Date.now()}`,
+          isGroup: true,
+          name: name,
+          participants: [...participantIds, user.id], // Ensure creator is included
+          unreadCount: {},
+          messages: []
+      };
+      // Initialize unread counts
+      newSession.participants.forEach(pid => newSession.unreadCount[pid] = 0);
+      setChats(prev => [newSession, ...prev]);
+      return newSession.id;
+  };
+
   const updateChatSession = (sessionId: string, updates: Partial<ChatSession>) => {
       setChats(prev => prev.map(c => c.id === sessionId ? { ...c, ...updates } : c));
       if (updates.projectId) {
@@ -442,6 +461,30 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
      }));
   };
 
+  const editMessage = (sessionId: string, messageId: string, newContent: string) => {
+      setChats(prev => prev.map(c => {
+          if (c.id === sessionId) {
+              return {
+                  ...c,
+                  messages: c.messages.map(m => m.id === messageId ? { ...m, content: newContent, isEdited: true } : m)
+              };
+          }
+          return c;
+      }));
+  };
+
+  const deleteMessage = (sessionId: string, messageId: string) => {
+      setChats(prev => prev.map(c => {
+          if (c.id === sessionId) {
+              return {
+                  ...c,
+                  messages: c.messages.filter(m => m.id !== messageId)
+              };
+          }
+          return c;
+      }));
+  };
+
   const markChatRead = (sessionId: string) => {
      setChats(prev => prev.map(c => {
         if (c.id === sessionId) {
@@ -453,6 +496,20 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         }
         return c;
      }));
+  };
+
+  const toggleChatReadStatus = (sessionId: string) => {
+      setChats(prev => prev.map(c => {
+          if (c.id === sessionId) {
+              // If currently 0, set to 1 to mark unread. If > 0, set to 0.
+              const currentUnread = c.unreadCount[user.id] || 0;
+              return {
+                  ...c,
+                  unreadCount: { ...c.unreadCount, [user.id]: currentUnread === 0 ? 1 : 0 }
+              };
+          }
+          return c;
+      }));
   };
 
   // --- IRIS EXECUTOR ---
@@ -492,7 +549,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTaskStatus, addTask, updateTask, deleteTask,
       addAsset, updateAssetStatus, addAssetComment, deleteAsset,
       updateProject, assignProjectToWorker, markNotificationRead, updateUserPreferences, updateSystemSettings, notify, getAssetsByClient,
-      createChatSession, updateChatSession, sendMessage, markChatRead, executeIrisAction
+      createChatSession, createGroupSession, updateChatSession, sendMessage, editMessage, deleteMessage, markChatRead, toggleChatReadStatus, executeIrisAction
     }}>
       {children}
     </StoreContext.Provider>
