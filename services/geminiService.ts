@@ -1,8 +1,15 @@
 
 import { GoogleGenAI } from "@google/genai";
-import { IrisTeamMember, ChatMessage, IrisAction, IrisActionType } from "../types";
+import { IrisTeamMember, ChatMessage, IrisAction, IrisActionType, GeminiModel } from "../types";
 
 const API_KEY = process.env.API_KEY || '';
+
+// Fallback Chain: Speed -> Reliability -> Power
+const MODEL_FALLBACK_CHAIN: GeminiModel[] = [
+  'gemini-2.5-flash',
+  'gemini-1.5-flash',
+  'gemini-1.5-pro'
+];
 
 class GeminiService {
   private ai: GoogleGenAI | null = null;
@@ -15,14 +22,43 @@ class GeminiService {
     }
   }
 
+  // --- CORE: FALLBACK SYSTEM ---
+  
+  private async generateWithFallback(
+    contents: any, 
+    config: any = {}, 
+    models: GeminiModel[] = MODEL_FALLBACK_CHAIN
+  ): Promise<any> {
+    if (!this.ai) throw new Error("API Key Missing");
+
+    let lastError;
+
+    for (const model of models) {
+      try {
+        // console.log(`Attempting generation with model: ${model}`);
+        const response = await this.ai.models.generateContent({
+          model: model,
+          contents: contents,
+          config: config
+        });
+        return response;
+      } catch (error) {
+        console.warn(`Model ${model} failed:`, error);
+        lastError = error;
+        // Continue to next model in loop
+      }
+    }
+    
+    throw lastError || new Error("All fallback models failed.");
+  }
+
   // Admin Orchestrator: Map Natural Language to System Actions
   async analyzeAdminIntent(message: string, context: string): Promise<IrisAction> {
      if (!this.ai) return { type: IrisActionType.NONE, payload: {}, confirmationText: "API Key Missing" };
 
      try {
-        const response = await this.ai.models.generateContent({
-           model: 'gemini-2.5-flash',
-           contents: `
+        const response = await this.generateWithFallback(
+           `
               You are the core operating system of Brandistry CRM. You have admin privileges.
               Context Data: ${context}
               
@@ -37,14 +73,14 @@ class GeminiService {
 
               Return ONLY raw JSON.
            `,
-           config: { responseMimeType: "application/json" }
-        });
+           { responseMimeType: "application/json" }
+        );
 
         const text = response.text || '{}';
         return JSON.parse(text);
      } catch (e) {
-        console.error("Intent analysis failed", e);
-        return { type: IrisActionType.NONE, payload: {}, confirmationText: "I couldn't understand that command." };
+        console.error("Intent analysis failed after fallbacks", e);
+        return { type: IrisActionType.NONE, payload: {}, confirmationText: "I couldn't understand that command due to a system error." };
      }
   }
 
@@ -53,9 +89,8 @@ class GeminiService {
     if (!this.ai) return { text: "System Error: API Key missing.", steps: [] };
 
     try {
-        const response = await this.ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: `
+        const response = await this.generateWithFallback(
+            `
                 Act as the Chief Orchestrator for Brandistry CRM.
                 User Request: "${message}"
                 
@@ -72,11 +107,11 @@ class GeminiService {
                     "finalResponse": "A summary message to the admin explaining the plan."
                 }
             `,
-            config: {
+            {
                 responseMimeType: "application/json",
                 temperature: 0.2
             }
-        });
+        );
 
         const data = JSON.parse(response.text || '{}');
         return {
@@ -100,9 +135,7 @@ class GeminiService {
     if (!this.ai) return "API Key missing.";
 
     try {
-      const response = await this.ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: [
+      const contents = [
             ...context.map(c => ({
                 role: c.role || 'user',
                 parts: [{ text: c.content }]
@@ -111,12 +144,15 @@ class GeminiService {
                 role: 'user',
                 parts: [{ text: message }]
             }
-        ],
-        config: {
+        ];
+        
+      const response = await this.generateWithFallback(
+        contents,
+        {
           systemInstruction: `${activeTeamMember.systemPrompt} You are a specialist within the Brandistry CRM. Be concise.`,
           temperature: 0.7,
-        },
-      });
+        }
+      );
 
       return response.text || "I processed that, but couldn't generate a text response.";
     } catch (error) {

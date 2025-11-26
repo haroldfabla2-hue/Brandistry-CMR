@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { 
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
-  AreaChart, Area
+  AreaChart, Area, PieChart, Pie, Cell, Legend
 } from 'recharts';
-import { TrendingUp, Users, CheckCircle, AlertCircle, DollarSign, Briefcase, ListTodo, Calendar, Sparkles } from 'lucide-react';
-import { Project, User, UserRole, Task, Asset, AssetStatus } from '../types';
+import { TrendingUp, Users, CheckCircle, AlertCircle, DollarSign, Briefcase, ListTodo, Calendar, Sparkles, User as UserIcon, ArrowUpRight, ArrowDownRight, Wallet } from 'lucide-react';
+import { Project, User, UserRole, Task, Asset, AssetStatus, TaskStatus } from '../types';
 import { GemPhotoAI } from './GemPhotoAI';
 import { useStore } from '../context/StoreContext';
 
@@ -21,7 +21,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, projects, tasks, ass
   const filteredTasks = user.role === UserRole.ADMIN ? tasks : tasks.filter(t => t.assignee === user.id);
   
   if (user.role === UserRole.ADMIN) {
-    return <AdminDashboard projects={projects} tasks={tasks} assets={assets} />;
+    return <AdminDashboard projects={projects} tasks={tasks} assets={assets} users={useStore().users} />;
   }
   
   if (user.role === UserRole.WORKER) {
@@ -33,91 +33,226 @@ export const Dashboard: React.FC<DashboardProps> = ({ user, projects, tasks, ass
 
 // --- Sub-Dashboards ---
 
-const AdminDashboard = ({ projects, tasks, assets }: { projects: Project[], tasks: Task[], assets: Asset[] }) => {
+const AdminDashboard = ({ projects, tasks, assets, users }: { projects: Project[], tasks: Task[], assets: Asset[], users: User[] }) => {
   const { userPreferences } = useStore();
   const [showGemAI, setShowGemAI] = useState(false);
   
-  const totalRevenue = projects.reduce((acc, curr) => acc + curr.budget, 0);
+  // --- REAL-TIME CALCULATIONS ---
+
+  // 1. Financial Metrics
+  const financials = useMemo(() => {
+    const totalBudget = projects.reduce((acc, curr) => acc + curr.budget, 0);
+    const totalSpent = projects.reduce((acc, curr) => acc + curr.spent, 0);
+    const remaining = totalBudget - totalSpent;
+    const burnRate = totalBudget > 0 ? (totalSpent / totalBudget) * 100 : 0;
+    
+    // Revenue by Client (Top 4)
+    const clientRevenue: Record<string, number> = {};
+    projects.forEach(p => {
+       // Find client name via store would be better, but assuming we have logic or denormalized
+       // For now group by clientId
+       clientRevenue[p.clientId] = (clientRevenue[p.clientId] || 0) + p.budget;
+    });
+    const pieData = Object.entries(clientRevenue).map(([name, value], idx) => ({
+       name: `Client ${name.substring(0,4)}...`, // Truncated ID for display if name unavailable
+       value
+    })).sort((a,b) => b.value - a.value).slice(0, 5);
+
+    return { totalBudget, totalSpent, remaining, burnRate, pieData };
+  }, [projects]);
+
+  // 2. Team Performance Metrics
+  const teamStats = useMemo(() => {
+     const workers = users.filter(u => u.role === UserRole.WORKER);
+     
+     return workers.map(worker => {
+        const workerTasks = tasks.filter(t => t.assignee === worker.id);
+        const completed = workerTasks.filter(t => t.status === TaskStatus.DONE).length;
+        const total = workerTasks.length;
+        const efficiency = total > 0 ? Math.round((completed / total) * 100) : 0;
+        const highPriority = workerTasks.filter(t => t.priority === 'HIGH' && t.status !== TaskStatus.DONE).length;
+
+        return {
+           name: worker.name,
+           active: total - completed,
+           completed,
+           efficiency,
+           highPriority,
+           avatar: worker.avatar
+        };
+     }).sort((a,b) => b.active - a.active); // Sort by most active load
+  }, [users, tasks]);
+
+  // 3. Operational Metrics
   const activeProjects = projects.filter(p => p.status === 'ACTIVE').length;
   const totalAssetsDelivered = assets.filter(a => a.status === AssetStatus.DELIVERED).length;
-  
-  const data = [
-      { name: 'Mon', tasks: 12 }, { name: 'Tue', tasks: 19 }, { name: 'Wed', tasks: 15 },
-      { name: 'Thu', tasks: 22 }, { name: 'Fri', tasks: 30 }, { name: 'Sat', tasks: 10 }, { name: 'Sun', tasks: 5 }
-  ];
+
+  // Colors for charts
+  const COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899'];
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <div className="flex justify-between items-end">
          <div>
-            <h2 className="text-lg font-bold text-slate-700">Agency Overview</h2>
-            <p className="text-slate-500 text-sm">Real-time metrics for Brandistry operations.</p>
+            <h2 className="text-2xl font-bold text-slate-800">Executive Overview</h2>
+            <p className="text-slate-500 text-sm">Real-time financial and operational intelligence.</p>
          </div>
          <button 
            onClick={() => setShowGemAI(true)}
            className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 text-white rounded-lg shadow-md hover:shadow-lg hover:scale-105 transition-all font-medium"
          >
             <Sparkles size={16} className="text-yellow-300" />
-            Launch Gem Photo AI
+            Gem Photo AI
          </button>
       </div>
 
+      {/* KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         {userPreferences.dashboardWidgets.revenue && (
-           <StatCard title="Total Allocated Budget" value={`$${totalRevenue.toLocaleString()}`} trend="+12.5%" icon={<DollarSign className="text-emerald-500" size={24} />} />
+           <StatCard 
+             title="Total Budget Volume" 
+             value={`$${financials.totalBudget.toLocaleString()}`} 
+             subtitle={`${financials.burnRate.toFixed(1)}% utilized`}
+             icon={<Wallet className="text-emerald-500" size={24} />} 
+             trend="up"
+           />
         )}
         {userPreferences.dashboardWidgets.activeProjects && (
-           <StatCard title="Active Projects" value={activeProjects.toString()} trend="+2" icon={<Briefcase className="text-brand-500" size={24} />} />
+           <StatCard 
+             title="Active Projects" 
+             value={activeProjects.toString()} 
+             subtitle={`${projects.length} Total in pipeline`}
+             icon={<Briefcase className="text-brand-500" size={24} />} 
+             trend="neutral"
+           />
         )}
-        <StatCard title="Assets Delivered" value={totalAssetsDelivered.toString()} trend="+5 this week" icon={<CheckCircle className="text-blue-500" size={24} />} />
-        <StatCard title="Team Tasks" value={tasks.filter(t => t.status !== 'DONE').length.toString()} trend="Pending" icon={<ListTodo className="text-orange-500" size={24} />} />
+        <StatCard 
+          title="Deliverables Shipped" 
+          value={totalAssetsDelivered.toString()} 
+          subtitle="Assets marked delivered"
+          icon={<CheckCircle className="text-blue-500" size={24} />} 
+          trend="up"
+        />
+        <StatCard 
+          title="Pending Actions" 
+          value={tasks.filter(t => t.status !== 'DONE').length.toString()} 
+          subtitle="Tasks requiring attention"
+          icon={<ListTodo className="text-orange-500" size={24} />} 
+          trend="down"
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* TEAM PERFORMANCE (POWER BI STYLE) */}
         {userPreferences.dashboardWidgets.teamProductivity && (
-           <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-             <h3 className="text-lg font-semibold text-slate-800 mb-4">Weekly Task Completion</h3>
-             <div className="h-64">
+           <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+             <div className="flex justify-between items-center mb-6">
+                <div>
+                   <h3 className="text-lg font-bold text-slate-800">Workforce Analytics</h3>
+                   <p className="text-xs text-slate-500">Real-time workload distribution & efficiency.</p>
+                </div>
+                <div className="flex gap-2 text-xs">
+                   <div className="flex items-center gap-1"><div className="w-2 h-2 bg-brand-500 rounded-full"/> Active Tasks</div>
+                   <div className="flex items-center gap-1"><div className="w-2 h-2 bg-emerald-400 rounded-full"/> Completed</div>
+                </div>
+             </div>
+             
+             <div className="flex-1 min-h-[300px]">
                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data}>
-                     <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                     <XAxis dataKey="name" axisLine={false} tickLine={false} />
-                     <YAxis axisLine={false} tickLine={false} />
-                     <Bar dataKey="tasks" fill="#8b5cf6" radius={[4, 4, 0, 0]} />
+                  <BarChart data={teamStats} layout="vertical" margin={{ left: 40, right: 20 }}>
+                     <CartesianGrid strokeDasharray="3 3" horizontal={true} vertical={false} />
+                     <XAxis type="number" hide />
+                     <YAxis dataKey="name" type="category" width={100} axisLine={false} tickLine={false} style={{ fontSize: '12px', fontWeight: 600 }} />
+                     <RechartsTooltip 
+                        cursor={{fill: 'transparent'}}
+                        contentStyle={{borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)'}}
+                     />
+                     <Bar dataKey="active" name="Active Load" stackId="a" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={20} />
+                     <Bar dataKey="completed" name="Completed" stackId="a" fill="#34d399" radius={[0, 4, 4, 0]} barSize={20} />
                   </BarChart>
                </ResponsiveContainer>
+             </div>
+
+             {/* Mini Leaderboard */}
+             <div className="grid grid-cols-3 gap-4 mt-6 border-t border-slate-100 pt-4">
+                {teamStats.slice(0,3).map((worker, i) => (
+                   <div key={i} className="flex items-center gap-3">
+                      <img src={worker.avatar} className="w-8 h-8 rounded-full border border-slate-200" alt={worker.name}/>
+                      <div>
+                         <p className="text-xs font-bold text-slate-700">{worker.name}</p>
+                         <p className="text-[10px] text-slate-500">{worker.efficiency}% Efficiency</p>
+                      </div>
+                   </div>
+                ))}
              </div>
            </div>
         )}
         
-        {userPreferences.dashboardWidgets.systemHealth && (
-           <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-              <h3 className="text-lg font-semibold text-slate-800 mb-4">System Status</h3>
-              <div className="space-y-4">
-                 <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                       <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                       <span className="text-sm font-medium">StoreContext (DB)</span>
-                    </div>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Active</span>
+        {/* FINANCIAL HEALTH */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm flex flex-col">
+           <h3 className="text-lg font-bold text-slate-800 mb-2">Financial Health</h3>
+           <p className="text-xs text-slate-500 mb-6">Budget allocation vs. Actual spend.</p>
+
+           {/* Budget Bars */}
+           <div className="space-y-6 mb-8">
+              <div>
+                 <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600">Total Budget</span>
+                    <span className="font-bold text-slate-800">${financials.totalBudget.toLocaleString()}</span>
                  </div>
-                 <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                       <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                       <span className="text-sm font-medium">Gemini Pro API</span>
-                    </div>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Connected</span>
+                 <div className="w-full bg-slate-100 rounded-full h-2">
+                    <div className="bg-brand-500 h-2 rounded-full" style={{width: '100%'}}></div>
                  </div>
-                 <div className="flex justify-between items-center p-3 bg-slate-50 rounded-lg">
-                    <div className="flex items-center gap-3">
-                       <div className="w-2 h-2 bg-emerald-500 rounded-full"></div>
-                       <span className="text-sm font-medium">Client Portals</span>
-                    </div>
-                    <span className="text-xs text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Synced</span>
+              </div>
+              
+              <div>
+                 <div className="flex justify-between text-sm mb-1">
+                    <span className="text-slate-600">Actual Spent</span>
+                    <span className={`font-bold ${financials.burnRate > 90 ? 'text-red-600' : 'text-slate-800'}`}>
+                       ${financials.totalSpent.toLocaleString()} ({financials.burnRate.toFixed(0)}%)
+                    </span>
+                 </div>
+                 <div className="w-full bg-slate-100 rounded-full h-2">
+                    <div 
+                      className={`h-2 rounded-full transition-all duration-1000 ${financials.burnRate > 90 ? 'bg-red-500' : 'bg-emerald-500'}`} 
+                      style={{width: `${Math.min(financials.burnRate, 100)}%`}}
+                    ></div>
                  </div>
               </div>
            </div>
-        )}
+
+           {/* Client Distribution Pie */}
+           <div className="flex-1 min-h-[200px] relative">
+              <h4 className="text-xs font-bold text-slate-400 uppercase mb-2">Revenue by Client</h4>
+              <ResponsiveContainer width="100%" height="100%">
+                 <PieChart>
+                    <Pie
+                      data={financials.pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      paddingAngle={5}
+                      dataKey="value"
+                    >
+                      {financials.pieData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <RechartsTooltip />
+                 </PieChart>
+              </ResponsiveContainer>
+              {/* Center Text */}
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none pt-6">
+                 <div className="text-center">
+                    <span className="block text-xl font-bold text-slate-700">{projects.length}</span>
+                    <span className="text-[10px] text-slate-400 uppercase">Projects</span>
+                 </div>
+              </div>
+           </div>
+        </div>
+
       </div>
 
       {showGemAI && <GemPhotoAI onClose={() => setShowGemAI(false)} />}
@@ -240,7 +375,7 @@ const ClientDashboard = ({ user, projects, assets }: { user: User, projects: Pro
   );
 };
 
-const StatCard = ({ title, value, trend, icon }: { title: string, value: string, trend: string, icon: React.ReactNode }) => (
+const StatCard = ({ title, value, subtitle, trend, icon }: { title: string, value: string, subtitle: string, trend: 'up' | 'down' | 'neutral', icon: React.ReactNode }) => (
   <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm hover:shadow-md transition-shadow cursor-default">
     <div className="flex justify-between items-start">
       <div>
@@ -250,8 +385,9 @@ const StatCard = ({ title, value, trend, icon }: { title: string, value: string,
       <div className="p-2 bg-slate-50 rounded-lg">{icon}</div>
     </div>
     <div className="mt-4 flex items-center text-xs">
-      <span className="text-emerald-600 font-medium bg-emerald-50 px-2 py-0.5 rounded-full">{trend}</span>
-      <span className="text-slate-400 ml-2">vs last month</span>
+      {trend === 'up' && <ArrowUpRight className="text-emerald-500 mr-1" size={14} />}
+      {trend === 'down' && <ArrowDownRight className="text-red-500 mr-1" size={14} />}
+      <span className="text-slate-400">{subtitle}</span>
     </div>
   </div>
 );

@@ -1,3 +1,4 @@
+
 import { UserRole, ProjectStatus, TaskStatus, IrisTeamMember, AssetStatus, AssetType, Task, Client, Project, Asset, ProjectType, User, ChatSession } from './types';
 import { 
   BarChart3, PenTool, Code2, LineChart, Briefcase, Scale, 
@@ -229,9 +230,25 @@ export const MOCK_CHATS: ChatSession[] = [
     {
         id: 'chat_demo_1',
         participants: ['u1', 'w1'],
+        tags: ['priority', 'nebula'],
+        projectId: 'p1',
         messages: [
             { id: 'm1', senderId: 'u1', content: 'Hey Maria, how is the Nebula project going?', timestamp: '2023-10-25T10:00:00Z', isRead: true },
             { id: 'm2', senderId: 'w1', content: 'Going well! Just uploaded the new V1 designs.', timestamp: '2023-10-25T10:05:00Z', isRead: false },
+            { 
+               id: 'm3', 
+               senderId: 'w1', 
+               content: 'Here is the task for the homepage review.', 
+               timestamp: '2023-10-25T10:06:00Z', 
+               isRead: false,
+               blocks: [
+                  { 
+                     type: 'TASK', 
+                     id: 'tb1', 
+                     data: { id: 't1', title: 'Design Homepage Mockups', description: 'Create 3 variations.', projectId: 'p1', assignee: 'w1', status: TaskStatus.DONE, priority: 'HIGH', dueDate: '2023-10-10' }
+                  }
+               ]
+            }
         ],
         unreadCount: { 'u1': 1, 'w1': 0 },
         lastMessage: { id: 'm2', senderId: 'w1', content: 'Going well! Just uploaded the new V1 designs.', timestamp: '2023-10-25T10:05:00Z', isRead: false }

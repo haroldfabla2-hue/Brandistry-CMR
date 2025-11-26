@@ -1,8 +1,19 @@
-
 import React, { useState, useEffect } from 'react';
 import { Task, TaskStatus } from '../types';
 import { X, Calendar, User as UserIcon, Flag, Briefcase, Maximize2, Minimize2, MoreHorizontal } from 'lucide-react';
 import { useStore } from '../context/StoreContext';
+
+const PropertyRow = ({ label, icon, children }: { label: string, icon: React.ReactNode, children?: React.ReactNode }) => (
+   <div className="flex items-center gap-4 min-h-[32px]">
+      <div className="w-32 flex items-center gap-2 text-slate-500 text-sm">
+         {icon}
+         <span>{label}</span>
+      </div>
+      <div className="flex-1">
+         {children}
+      </div>
+   </div>
+);
 
 interface TaskModalProps {
   isOpen: boolean;
@@ -202,15 +213,3 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, ini
     </div>
   );
 };
-
-const PropertyRow = ({ label, icon, children }: { label: string, icon: React.ReactNode, children: React.ReactNode }) => (
-   <div className="flex items-center gap-4 min-h-[32px]">
-      <div className="w-32 flex items-center gap-2 text-slate-500 text-sm">
-         {icon}
-         <span>{label}</span>
-      </div>
-      <div className="flex-1">
-         {children}
-      </div>
-   </div>
-);

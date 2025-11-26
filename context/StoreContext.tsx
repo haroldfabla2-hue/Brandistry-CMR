@@ -1,7 +1,7 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { 
-  Project, Task, User, Asset, Client, Notification, AssetComment, ChatSession, ChatMessage, IrisAction, IrisActionType,
+  Project, Task, User, Asset, Client, Notification, AssetComment, ChatSession, ChatMessage, IrisAction, IrisActionType, MessageBlock,
   UserRole, TaskStatus, AssetStatus, AssetType, UserPreferences, SystemSettings, NotificationEvent, AccessRequestStatus
 } from '../types';
 import { 
@@ -61,7 +61,8 @@ interface StoreContextType {
 
   // Chat Actions
   createChatSession: (targetUserId: string) => string;
-  sendMessage: (sessionId: string, content: string) => void;
+  updateChatSession: (sessionId: string, updates: Partial<ChatSession>) => void;
+  sendMessage: (sessionId: string, content: string, blocks?: MessageBlock[]) => void;
   markChatRead: (sessionId: string) => void;
 
   // Iris Actions
@@ -132,7 +133,6 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const checkAutoLogin = async () => {
     const savedUserEmail = localStorage.getItem('brandistry_auth_email');
     if (savedUserEmail) {
-      // Small delay to ensure users are loaded from localstorage first
       await new Promise(r => setTimeout(r, 100)); 
       const idx = users.findIndex(u => u.email === savedUserEmail);
       if (idx !== -1) {
@@ -408,13 +408,21 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
      return newSession.id;
   };
 
-  const sendMessage = (sessionId: string, content: string) => {
+  const updateChatSession = (sessionId: string, updates: Partial<ChatSession>) => {
+      setChats(prev => prev.map(c => c.id === sessionId ? { ...c, ...updates } : c));
+      if (updates.projectId) {
+         notify({ title: 'Context Updated', message: 'Chat stream linked to project.', type: 'info', priority: 'LOW' });
+      }
+  };
+
+  const sendMessage = (sessionId: string, content: string, blocks?: MessageBlock[]) => {
      const newMessage: ChatMessage = {
         id: `m_${Date.now()}`,
         senderId: user.id,
         content,
         timestamp: new Date().toISOString(),
-        isRead: false
+        isRead: false,
+        blocks // New rich payload support
      };
      
      setChats(prev => prev.map(c => {
@@ -484,7 +492,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       updateTaskStatus, addTask, updateTask, deleteTask,
       addAsset, updateAssetStatus, addAssetComment, deleteAsset,
       updateProject, assignProjectToWorker, markNotificationRead, updateUserPreferences, updateSystemSettings, notify, getAssetsByClient,
-      createChatSession, sendMessage, markChatRead, executeIrisAction
+      createChatSession, updateChatSession, sendMessage, markChatRead, executeIrisAction
     }}>
       {children}
     </StoreContext.Provider>

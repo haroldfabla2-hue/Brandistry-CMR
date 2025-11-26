@@ -18,15 +18,15 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  password?: string; // Added for auth simulation
+  password?: string;
   role: UserRole;
   avatar: string;
-  company?: string; // For clients
-  specialty?: string; // For workers
-  assignedProjectIds?: string[]; // IDs of projects assigned to this worker
-  assignedClientIds?: string[]; // IDs of clients assigned to this worker
+  company?: string;
+  specialty?: string;
+  assignedProjectIds?: string[];
+  assignedClientIds?: string[];
   hourlyRate?: number;
-  accessRequests: AccessRequest[]; // New field for security
+  accessRequests: AccessRequest[];
 }
 
 export interface UserPreferences {
@@ -77,7 +77,7 @@ export enum ProjectType {
 
 export interface Project {
   id: string;
-  clientId: string; // Foreign Key to Client
+  clientId: string;
   name: string;
   description: string;
   type: ProjectType;
@@ -86,10 +86,10 @@ export interface Project {
   spent: number;
   startDate: string;
   endDate: string;
-  team: string[]; // Array of User IDs
-  deliverables: string[]; // List of expected deliverable names
+  team: string[];
+  deliverables: string[];
   notes?: string;
-  progress: number; // Computed 0-100
+  progress: number;
 }
 
 export enum TaskStatus {
@@ -104,7 +104,7 @@ export interface Task {
   title: string;
   description: string;
   projectId: string;
-  assignee: string; // User ID
+  assignee: string;
   status: TaskStatus;
   priority: 'LOW' | 'MEDIUM' | 'HIGH';
   dueDate: string;
@@ -113,19 +113,18 @@ export interface Task {
 
 export interface Client {
   id: string;
-  name: string; // Contact Name
+  name: string;
   company: string;
   email: string;
   phone?: string;
   industry: string;
   status: 'Active' | 'Lead' | 'Churned';
-  budgetAllocated: number; // Total budget across all projects
-  initialBrief?: string; // Added for client onboarding
+  budgetAllocated: number;
+  initialBrief?: string;
   notes?: string;
-  // Stats (Computed)
   totalProjects?: number;
   activeProjects?: number;
-  assetsDelivered?: number; // Counter
+  assetsDelivered?: number;
 }
 
 export interface IrisTeamMember {
@@ -139,26 +138,47 @@ export interface IrisTeamMember {
 
 // --- CHAT SYSTEM TYPES ---
 
+export type MessageBlockType = 'TEXT' | 'TASK' | 'ASSET' | 'FILE' | 'EVENT';
+
+export interface MessageBlock {
+  type: MessageBlockType;
+  id: string;
+  data: any; // Flexible data payload for the block (e.g., Task object)
+}
+
 export interface ChatMessage {
   id: string;
-  senderId: string; // 'model' for AI, or User ID
-  content: string;
+  senderId: string;
+  content: string; // Fallback text or main text
   timestamp: string;
   isRead: boolean;
-  // For AI Logic
   role?: 'user' | 'model';
   isOrchestration?: boolean;
   orchestrationSteps?: { step: string; status: 'pending' | 'active' | 'completed' }[];
+  
+  // Rich Features
+  blocks?: MessageBlock[]; // Interactive components
+  attachments?: { type: 'file' | 'image' | 'link'; url: string; name: string }[];
+  reactions?: Record<string, string[]>; // emoji -> [userIds]
+  mentions?: string[]; // userIds
+  tags?: string[]; // #urgent, #marketing
 }
 
 export interface ChatSession {
   id: string;
-  participants: string[]; // User IDs
+  participants: string[];
   lastMessage?: ChatMessage;
-  unreadCount: Record<string, number>; // Map UserId -> Count
+  unreadCount: Record<string, number>;
   messages: ChatMessage[];
+  
+  // Organization
   isGroup?: boolean;
-  name?: string; // For Group Chats
+  name?: string; // Channel name
+  description?: string;
+  isPinned?: boolean;
+  isArchived?: boolean;
+  tags?: string[]; // Metadata tags for filtering
+  projectId?: string; // Link to a project context
 }
 
 // --- IRIS ACTION TYPES ---
@@ -184,7 +204,7 @@ export enum AssetStatus {
   PENDING_REVIEW = 'PENDING_REVIEW',
   CHANGES_REQUESTED = 'CHANGES_REQUESTED',
   APPROVED = 'APPROVED',
-  DELIVERED = 'DELIVERED', // Final state that increments client counters
+  DELIVERED = 'DELIVERED',
   REJECTED = 'REJECTED'
 }
 
@@ -207,8 +227,8 @@ export interface Asset {
   title: string;
   type: AssetType;
   url: string; 
-  projectId: string; // Foreign Key to Project
-  clientId: string;  // Foreign Key to Client (Denormalized for easy access)
+  projectId: string;
+  clientId: string;
   uploadedBy: string;
   createdAt: string;
   status: AssetStatus;
@@ -226,9 +246,9 @@ export interface NotificationEvent {
   message: string;
   type: 'info' | 'success' | 'warning' | 'error';
   priority: NotificationPriority;
-  targetUserId?: string; // If specific to a user
-  targetRoleId?: UserRole; // If specific to a role
-  projectId?: string; // If specific to a project team
+  targetUserId?: string;
+  targetRoleId?: UserRole;
+  projectId?: string;
 }
 
 export interface Notification {
@@ -252,3 +272,5 @@ export interface GoogleFile {
   iconLink: string;
   modifiedTime: string;
 }
+
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-1.5-flash' | 'gemini-1.5-pro' | 'gemini-2.5-flash-image';
