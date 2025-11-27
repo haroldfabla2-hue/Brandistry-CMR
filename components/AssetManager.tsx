@@ -6,16 +6,15 @@ import {
   FileImage, FileVideo, FileText, CheckCircle, XCircle, 
   Upload, MessageSquare, History, Trash2, LayoutGrid, List,
   Send, AlertCircle, ChevronRight, Download, Eye, BarChart3, Image,
-  Laptop, Cloud, Link as LinkIcon, Loader2, FileUp, Folder
+  Laptop, Cloud, Link as LinkIcon, Loader2, FileUp, Folder, FileSpreadsheet, Presentation, FileAudio, FileBox
 } from 'lucide-react';
 import { AssetAnalytics } from './AssetAnalytics';
 import { googleDriveService } from '../services/googleDriveService';
 
 export const AssetManager: React.FC = () => {
-  const { assets, projects, user, addAsset, updateAssetStatus, deleteAsset, addAssetComment, notify } = useStore();
+  const { assets, projects, user, addAsset, deleteAsset, setViewingAsset } = useStore();
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [activeTab, setActiveTab] = useState<'gallery' | 'analytics'>('gallery');
-  const [selectedAsset, setSelectedAsset] = useState<Asset | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   
   // Filter assets based on role
@@ -26,19 +25,14 @@ export const AssetManager: React.FC = () => {
     return true; // Workers and Admins see all
   });
 
-  const handleDownload = (asset: Asset) => {
-      const link = document.createElement('a');
-      link.href = asset.url;
-      link.download = `${asset.title.replace(/\s+/g, '_')}`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-  };
-
-  const handleDelete = (id: string) => {
-    if(window.confirm("Are you sure you want to permanently delete this asset?")) {
-        deleteAsset(id);
-        setSelectedAsset(null);
+  const getStatusColor = (status: AssetStatus) => {
+    switch (status) {
+        case AssetStatus.DELIVERED: return 'bg-purple-100 text-purple-700 border-purple-200';
+        case AssetStatus.APPROVED: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+        case AssetStatus.CHANGES_REQUESTED: return 'bg-red-100 text-red-700 border-red-200';
+        case AssetStatus.PENDING_REVIEW: return 'bg-amber-100 text-amber-700 border-amber-200';
+        case AssetStatus.REJECTED: return 'bg-gray-100 text-gray-700 border-gray-200';
+        default: return 'bg-slate-100 text-slate-600 border-slate-200';
     }
   };
 
@@ -104,7 +98,7 @@ export const AssetManager: React.FC = () => {
       ) : (
         <div className="flex flex-1 overflow-hidden relative">
           {/* Main Asset View */}
-          <div className={`flex-1 overflow-y-auto p-6 ${selectedAsset ? 'w-2/3 border-r border-slate-200' : 'w-full'} custom-scroll bg-slate-50/50 transition-all duration-300`}>
+          <div className="flex-1 overflow-y-auto p-6 w-full custom-scroll bg-slate-50/50">
             {filteredAssets.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-slate-400 animate-in fade-in zoom-in">
                 <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-4">
@@ -117,27 +111,34 @@ export const AssetManager: React.FC = () => {
                  {filteredAssets.map(asset => (
                    <div 
                     key={asset.id}
-                    onClick={() => setSelectedAsset(asset)}
-                    className={`group cursor-pointer border rounded-xl overflow-hidden transition-all duration-200 ${
-                      selectedAsset?.id === asset.id ? 'ring-2 ring-brand-500 border-transparent shadow-md scale-[1.02]' : 'border-slate-200 hover:shadow-md bg-white hover:-translate-y-1'
-                    } ${viewMode === 'list' ? 'flex items-center p-3 gap-4 h-16' : ''}`}
+                    onClick={() => setViewingAsset(asset)}
+                    className={`group cursor-pointer border rounded-xl overflow-hidden transition-all duration-200 border-slate-200 hover:shadow-md bg-white hover:-translate-y-1 ${viewMode === 'list' ? 'flex items-center p-3 gap-4 h-16' : ''}`}
                    >
                       {/* Thumbnail */}
-                      <div className={viewMode === 'grid' ? 'h-32 bg-slate-100 relative overflow-hidden' : 'w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0'}>
+                      <div className={viewMode === 'grid' ? 'h-36 bg-slate-100 relative overflow-hidden flex items-center justify-center' : 'w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0'}>
                          {asset.type === AssetType.IMAGE ? (
                            <img src={asset.url} alt={asset.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
                          ) : asset.type === AssetType.VIDEO ? (
                            <div className="w-full h-full relative">
                               <video src={asset.url} className="w-full h-full object-cover" muted />
                               <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                                 <FileVideo className="text-white drop-shadow-md" size={24}/>
+                                 <FileVideo className="text-white drop-shadow-md" size={32}/>
                               </div>
                            </div>
                          ) : (
-                           <div className="text-slate-400 flex items-center justify-center w-full h-full">
-                             <FileText />
+                           <div className={`flex flex-col items-center justify-center w-full h-full ${
+                                asset.type === AssetType.SPREADSHEET ? 'text-emerald-500 bg-emerald-50' :
+                                asset.type === AssetType.PRESENTATION ? 'text-orange-500 bg-orange-50' :
+                                asset.type === AssetType.AUDIO ? 'text-pink-500 bg-pink-50' :
+                                'text-blue-500 bg-blue-50'
+                           }`}>
+                             {asset.type === AssetType.SPREADSHEET ? <FileSpreadsheet size={32}/> :
+                              asset.type === AssetType.PRESENTATION ? <Presentation size={32}/> :
+                              asset.type === AssetType.AUDIO ? <FileAudio size={32}/> :
+                              <FileText size={32} />}
                            </div>
                          )}
+                         
                          {viewMode === 'grid' && (
                            <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
                                <Eye className="text-white drop-shadow-md" size={24} />
@@ -169,150 +170,6 @@ export const AssetManager: React.FC = () => {
                </div>
             )}
           </div>
-  
-          {/* Detail/Comment Sidebar */}
-          {selectedAsset && (
-            <div className="w-96 bg-white flex flex-col border-l border-slate-200 shadow-xl z-20 animate-in slide-in-from-right duration-300 absolute right-0 top-0 bottom-0">
-               <div className="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
-                 <div>
-                    <h3 className="font-bold text-slate-800 line-clamp-1">{selectedAsset.title}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${getStatusColor(selectedAsset.status)}`}>
-                        {selectedAsset.status.replace('_', ' ')}
-                      </span>
-                      <span className="text-xs text-slate-400">Version {selectedAsset.version}</span>
-                    </div>
-                 </div>
-                 <button onClick={() => setSelectedAsset(null)} className="text-slate-400 hover:text-slate-600 p-1 hover:bg-slate-200 rounded"><ChevronRight/></button>
-               </div>
-  
-               {/* Preview */}
-               <div className="p-4 bg-slate-50 border-b border-slate-100 text-center relative group">
-                  {selectedAsset.type === AssetType.IMAGE ? (
-                     <img src={selectedAsset.url} className="max-h-48 mx-auto rounded shadow-sm border border-slate-200 object-contain bg-white" alt="Preview"/>
-                  ) : selectedAsset.type === AssetType.VIDEO ? (
-                     <video src={selectedAsset.url} controls className="max-h-48 mx-auto rounded shadow-sm border border-slate-200 bg-black w-full" />
-                  ) : (
-                     <div className="h-32 flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded bg-slate-100">
-                        <FileText size={32}/>
-                        <span className="text-xs mt-2">Preview not available</span>
-                     </div>
-                  )}
-                  
-                  <div className="flex justify-center gap-2 mt-4">
-                     <button 
-                      onClick={() => handleDownload(selectedAsset)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-white border border-slate-200 rounded text-xs font-medium text-slate-600 hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all"
-                     >
-                        <Download size={12}/> Download
-                     </button>
-                     {user.role === UserRole.ADMIN && (
-                       <button 
-                         onClick={() => handleDelete(selectedAsset.id)}
-                         className="flex items-center gap-1 px-3 py-1.5 bg-white border border-red-200 text-red-600 rounded text-xs font-medium hover:bg-red-50 hover:border-red-300 active:scale-95 transition-all"
-                       >
-                          <Trash2 size={12}/> Delete
-                       </button>
-                     )}
-                  </div>
-               </div>
-  
-               {/* Workflow Actions */}
-               {user.role !== UserRole.CLIENT && (
-                 <div className="p-4 border-b border-slate-100 bg-white space-y-2">
-                   <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wide mb-2">Review Actions</h4>
-                   
-                   {/* Normal Workflow Buttons */}
-                   {selectedAsset.status !== AssetStatus.DELIVERED && (
-                      <div className="flex gap-2">
-                        <button 
-                          onClick={() => updateAssetStatus(selectedAsset.id, AssetStatus.APPROVED)}
-                          className="flex-1 py-2 bg-emerald-600 text-white rounded text-xs font-medium hover:bg-emerald-700 active:scale-95 transition-all shadow-sm"
-                        >
-                          Approve
-                        </button>
-                        <button 
-                          onClick={() => updateAssetStatus(selectedAsset.id, AssetStatus.CHANGES_REQUESTED)}
-                          className="flex-1 py-2 bg-white border border-red-200 text-red-600 rounded text-xs font-medium hover:bg-red-50 active:scale-95 transition-all"
-                        >
-                          Changes
-                        </button>
-                      </div>
-                   )}
-
-                   {/* Final Delivery Button (Only if Approved) */}
-                   {selectedAsset.status === AssetStatus.APPROVED && (
-                      <button 
-                         onClick={() => updateAssetStatus(selectedAsset.id, AssetStatus.DELIVERED)}
-                         className="w-full py-2 bg-purple-600 text-white rounded text-xs font-medium hover:bg-purple-700 active:scale-95 transition-all shadow-sm flex items-center justify-center gap-2"
-                      >
-                         <CheckCircle size={14}/> Mark as Delivered
-                      </button>
-                   )}
-                 </div>
-               )}
-  
-               {/* Comments */}
-               <div className="flex-1 flex flex-col min-h-0 bg-slate-50/30">
-                 <div className="p-3 border-b border-slate-100 bg-slate-50 flex items-center gap-2 text-xs font-bold text-slate-600 uppercase">
-                    <MessageSquare size={12}/> 
-                    <span>Comments & Feedback</span>
-                    <span className="ml-auto bg-slate-200 text-slate-600 px-1.5 rounded-full">{selectedAsset.comments.length}</span>
-                 </div>
-                 
-                 <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scroll">
-                    {selectedAsset.comments.length === 0 && (
-                      <div className="text-center py-8 opacity-50">
-                          <MessageSquare size={24} className="mx-auto mb-2 text-slate-400"/>
-                          <p className="text-xs text-slate-500 italic">No comments yet.</p>
-                          <p className="text-[10px] text-slate-400">Start the conversation below</p>
-                      </div>
-                    )}
-                    {selectedAsset.comments.map(comment => (
-                      <div key={comment.id} className="flex gap-2 animate-in slide-in-from-bottom-2 fade-in duration-300">
-                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${comment.userId === user.id ? 'bg-brand-100 text-brand-600' : 'bg-slate-200 text-slate-600'}`}>
-                          {comment.userName.charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className={`p-2.5 rounded-2xl text-xs ${comment.userId === user.id ? 'bg-brand-50 text-brand-900 rounded-tr-none' : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
-                            <span className="font-bold block mb-0.5 text-[10px] opacity-70">{comment.userName}</span>
-                            <p className="break-words">{comment.content}</p>
-                          </div>
-                          <span className="text-[9px] text-slate-400 ml-1 mt-0.5 block">
-                            {new Date(comment.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
-                 </div>
-                 
-                 {/* Add Comment Input */}
-                 <div className="p-3 border-t border-slate-200 bg-white">
-                   <form 
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        const input = (e.target as any).elements.comment;
-                        if(input.value.trim()) {
-                          addAssetComment(selectedAsset.id, input.value);
-                          input.value = '';
-                        }
-                      }}
-                      className="relative"
-                   >
-                     <input 
-                      name="comment"
-                      placeholder="Type feedback..."
-                      className="w-full pl-3 pr-10 py-2.5 text-xs border border-slate-200 rounded-lg focus:ring-2 focus:ring-brand-500 outline-none transition-all"
-                      autoComplete="off"
-                     />
-                     <button type="submit" className="absolute right-1.5 top-1.5 p-1.5 text-brand-600 hover:bg-brand-50 rounded transition-colors">
-                       <Send size={14}/>
-                     </button>
-                   </form>
-                 </div>
-               </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -331,17 +188,6 @@ export const AssetManager: React.FC = () => {
       )}
     </div>
   );
-};
-
-const getStatusColor = (status: AssetStatus) => {
-  switch (status) {
-    case AssetStatus.DELIVERED: return 'bg-purple-100 text-purple-700 border-purple-200';
-    case AssetStatus.APPROVED: return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-    case AssetStatus.CHANGES_REQUESTED: return 'bg-red-100 text-red-700 border-red-200';
-    case AssetStatus.PENDING_REVIEW: return 'bg-amber-100 text-amber-700 border-amber-200';
-    case AssetStatus.REJECTED: return 'bg-gray-100 text-gray-700 border-gray-200';
-    default: return 'bg-slate-100 text-slate-600 border-slate-200';
-  }
 };
 
 const UploadModal = ({ projects, onClose, onUpload }: any) => {
@@ -386,10 +232,18 @@ const UploadModal = ({ projects, onClose, onUpload }: any) => {
   const handleDeviceFile = (e: React.ChangeEvent<HTMLInputElement>) => {
      const file = e.target.files?.[0];
      if (file) {
+        let type = AssetType.DOCUMENT;
+        if (file.type.startsWith('video')) type = AssetType.VIDEO;
+        else if (file.type.startsWith('image')) type = AssetType.IMAGE;
+        else if (file.type.startsWith('audio')) type = AssetType.AUDIO;
+        else if (file.type.includes('sheet') || file.type.includes('csv') || file.type.includes('excel')) type = AssetType.SPREADSHEET;
+        else if (file.type.includes('presentation') || file.type.includes('powerpoint')) type = AssetType.PRESENTATION;
+        else if (file.type.includes('zip') || file.type.includes('compressed')) type = AssetType.ARCHIVE;
+
         setForm(prev => ({ 
            ...prev, 
            title: file.name.split('.')[0],
-           type: file.type.startsWith('video') ? AssetType.VIDEO : file.type.includes('pdf') ? AssetType.DOCUMENT : AssetType.IMAGE 
+           type
         }));
 
         const reader = new FileReader();
@@ -404,11 +258,18 @@ const UploadModal = ({ projects, onClose, onUpload }: any) => {
   };
 
   const selectDriveFile = (file: GoogleFile) => {
+     let type = AssetType.DOCUMENT;
+     if (file.mimeType.includes('image')) type = AssetType.IMAGE;
+     else if (file.mimeType.includes('video')) type = AssetType.VIDEO;
+     else if (file.mimeType.includes('audio')) type = AssetType.AUDIO;
+     else if (file.mimeType.includes('spreadsheet')) type = AssetType.SPREADSHEET;
+     else if (file.mimeType.includes('presentation')) type = AssetType.PRESENTATION;
+
      setForm(prev => ({
         ...prev,
         title: file.name,
         url: file.webViewLink,
-        type: file.mimeType.includes('image') ? AssetType.IMAGE : file.mimeType.includes('video') ? AssetType.VIDEO : AssetType.DOCUMENT
+        type
      }));
      setPreview(file.thumbnailLink || null);
   };
@@ -437,8 +298,8 @@ const UploadModal = ({ projects, onClose, onUpload }: any) => {
                  <input type="file" className="absolute inset-0 opacity-0 cursor-pointer" onChange={handleDeviceFile}/>
                  <div className="w-16 h-16 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mb-4"><FileUp size={32}/></div>
                  <h3 className="text-lg font-bold text-slate-700">Drag & Drop or Click to Upload</h3>
-                 <p className="text-sm text-slate-500 mt-1">Supports JPG, PNG, PDF, MP4</p>
-                 {form.url && <div className="mt-4 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full flex items-center gap-2"><CheckCircle size={12}/> File Selected</div>}
+                 <p className="text-sm text-slate-500 mt-1">Supports All Formats (Images, Video, Docs, ZIP)</p>
+                 {form.url && <div className="mt-4 text-xs font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full flex items-center gap-2"><CheckCircle size={12}/> File Selected: {form.type}</div>}
               </div>
            )}
 
@@ -518,6 +379,10 @@ const UploadModal = ({ projects, onClose, onUpload }: any) => {
                     <option value={AssetType.IMAGE}>Image</option>
                     <option value={AssetType.VIDEO}>Video</option>
                     <option value={AssetType.DOCUMENT}>Document</option>
+                    <option value={AssetType.SPREADSHEET}>Spreadsheet</option>
+                    <option value={AssetType.PRESENTATION}>Presentation</option>
+                    <option value={AssetType.AUDIO}>Audio</option>
+                    <option value={AssetType.ARCHIVE}>Archive (ZIP)</option>
                  </select>
               </div>
 

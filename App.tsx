@@ -22,6 +22,7 @@ import { FilesView } from './components/FilesView';
 import { ProjectDetail } from './components/ProjectDetail';
 import { LoginScreen } from './components/LoginScreen';
 import { UserManagement } from './components/UserManagement';
+import { AssetDetailModal } from './components/AssetDetailModal';
 
 enum View {
   DASHBOARD = 'DASHBOARD',
@@ -70,6 +71,7 @@ const App: React.FC = () => {
     <ErrorBoundary>
       <div className="flex h-screen bg-slate-50 overflow-hidden font-sans relative">
         <IrisFloat />
+        <AssetDetailModal />
         
         {isImpersonating && realUser && (
           <div className="absolute top-0 left-0 right-0 h-8 bg-amber-400 text-amber-950 font-medium text-xs flex items-center justify-center gap-4 z-50 shadow-md">

@@ -203,6 +203,23 @@ export interface IrisAction {
   confirmationText: string;
 }
 
+// --- REAL AGENT TYPES ---
+export interface AgentResult {
+  content: string;
+  suggestedAsset?: {
+    title: string;
+    type: AssetType;
+    content: string; // Base64 or Text content
+  }
+}
+
+export interface PredictiveInsight {
+  riskLevel: 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
+  prediction: string;
+  recommendation: string;
+  impactedProjects: string[];
+}
+
 // --- ASSET MANAGEMENT TYPES ---
 
 export enum AssetStatus {
@@ -217,7 +234,11 @@ export enum AssetStatus {
 export enum AssetType {
   IMAGE = 'IMAGE',
   VIDEO = 'VIDEO',
-  DOCUMENT = 'DOCUMENT'
+  DOCUMENT = 'DOCUMENT',
+  SPREADSHEET = 'SPREADSHEET',
+  PRESENTATION = 'PRESENTATION',
+  AUDIO = 'AUDIO',
+  ARCHIVE = 'ARCHIVE'
 }
 
 export interface AssetComment {

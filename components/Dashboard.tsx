@@ -7,11 +7,12 @@ import {
 import { 
   TrendingUp, Users, CheckCircle, AlertCircle, DollarSign, Briefcase, ListTodo, 
   Calendar, Sparkles, User as UserIcon, ArrowUpRight, ArrowDownRight, Wallet,
-  Maximize2, Minimize2, Filter, RefreshCw, Search, Zap, X, Activity, Clock, Download
+  Maximize2, Minimize2, Filter, RefreshCw, Search, Zap, X, Activity, Clock, Download, BrainCircuit
 } from 'lucide-react';
-import { Project, User, UserRole, Task, Asset, AssetStatus, TaskStatus, ProjectStatus } from '../types';
+import { Project, User, UserRole, Task, Asset, AssetStatus, TaskStatus, ProjectStatus, PredictiveInsight } from '../types';
 import { GemPhotoAI } from './GemPhotoAI';
 import { useStore } from '../context/StoreContext';
+import { geminiService } from '../services/geminiService';
 
 interface DashboardProps {
   user: User;
@@ -52,9 +53,10 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
   const [zoomedTile, setZoomedTile] = useState<string | null>(null);
   const [nlQuery, setNlQuery] = useState('');
   const [viewMode, setViewMode] = useState<'visual' | 'report'>('visual');
+  const [insight, setInsight] = useState<PredictiveInsight | null>(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
 
   // --- 1. REAL ANALYTICS ENGINE (Deterministic) ---
-  // No simulation. Calculations based strictly on current DB state.
   const analytics = useMemo(() => {
     // Filter Data
     let activeP = projects;
@@ -79,7 +81,7 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
     const activeLoad = activeT.filter(t => t.status === TaskStatus.IN_PROGRESS).length;
     const reviewQueue = assets.filter(a => a.status === AssetStatus.PENDING_REVIEW).length;
     
-    // Team Performance (Real Velocity)
+    // Team Performance
     const teamStats = users
         .filter(u => u.role === UserRole.WORKER)
         .map(u => {
@@ -95,26 +97,26 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
                 completed,
                 inProgress,
                 efficiency,
-                workload: inProgress // Active tasks currently on their plate
+                workload: inProgress 
             };
         })
         .sort((a,b) => b.efficiency - a.efficiency);
 
-    // Risk Matrix (Budget Burn vs Time Elapsed) - Simulated time for demo, but real math
+    // Risk Matrix
     const riskMatrix = activeP.map(p => {
         const startDate = new Date(p.startDate).getTime();
         const endDate = new Date(p.endDate).getTime();
         const now = new Date().getTime();
         const totalDuration = endDate - startDate;
-        const elapsed = Math.max(0, Math.min(1, (now - startDate) / totalDuration)); // 0 to 1
-        const burn = p.budget > 0 ? p.spent / p.budget : 0; // 0 to 1+
+        const elapsed = Math.max(0, Math.min(1, (now - startDate) / totalDuration));
+        const burn = p.budget > 0 ? p.spent / p.budget : 0;
         
         return {
             id: p.id,
             name: p.name,
-            x: Math.round(elapsed * 100), // Time %
-            y: Math.round(burn * 100),    // Budget %
-            z: p.budget, // Bubble size
+            x: Math.round(elapsed * 100),
+            y: Math.round(burn * 100),
+            z: p.budget,
             status: p.status
         };
     });
@@ -136,6 +138,21 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
     };
   }, [projects, tasks, assets, users, nlQuery, filters]);
 
+  // --- AI PREDICTION HANDLER ---
+  const runPrediction = async () => {
+     setIsAnalyzing(true);
+     // Prepare lightweight context
+     const context = `
+        Projects: ${projects.map(p => `${p.name} (Budget: ${p.budget}, Spent: ${p.spent}, Progress: ${p.progress}%)`).join('; ')}
+        Tasks: ${tasks.length} total, ${analytics.activeLoad} in progress.
+        Team: ${analytics.teamStats.map(t => `${t.name} (${t.efficiency}% eff)`).join(', ')}.
+     `;
+     
+     const result = await geminiService.generatePredictiveAnalysis(context);
+     setInsight(result);
+     setIsAnalyzing(false);
+  };
+
   // --- HELPERS ---
   const toggleFilter = (key: keyof DashboardFilter, value: string | undefined) => {
      setFilters(prev => ({ ...prev, [key]: prev[key] === value ? undefined : value }));
@@ -156,12 +173,14 @@ Generated: ${new Date().toLocaleString()}
 - Total Spent: $${analytics.totalSpent.toLocaleString()}
 - Global Margin: ${analytics.globalMargin.toFixed(1)}%
 
+## AI Predictive Analysis
+- Risk Level: ${insight?.riskLevel || 'N/A'}
+- Prediction: ${insight?.prediction || 'Not run'}
+- Recommendation: ${insight?.recommendation || 'N/A'}
+
 ## Operational Velocity
 - Active Tasks (Load): ${analytics.activeLoad}
 - Assets in Review: ${analytics.reviewQueue}
-
-## Team Performance
-${analytics.teamStats.map(m => `- ${m.name}: ${m.efficiency}% Efficiency (${m.inProgress} active tasks)`).join('\n')}
      `;
      
      const blob = new Blob([content], { type: 'text/markdown' });
@@ -233,6 +252,43 @@ ${analytics.teamStats.map(m => `- ${m.name}: ${m.efficiency}% Efficiency (${m.in
                  </button>
               </div>
               
+              {/* AI PREDICTIVE INSIGHTS */}
+              <div className="bg-slate-900 rounded-xl p-6 text-white mb-8 relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-64 h-64 bg-brand-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2"></div>
+                 <div className="flex justify-between items-start relative z-10">
+                    <div>
+                       <h3 className="text-lg font-bold flex items-center gap-2"><BrainCircuit size={20} className="text-brand-400"/> AI Predictive Intelligence</h3>
+                       <p className="text-slate-400 text-sm mt-1">Powered by Gemini 1.5 Pro Analysis</p>
+                    </div>
+                    <button 
+                       onClick={runPrediction} 
+                       disabled={isAnalyzing}
+                       className="px-4 py-2 bg-brand-600 hover:bg-brand-500 rounded-lg font-bold text-xs flex items-center gap-2 transition-all disabled:opacity-50"
+                    >
+                       {isAnalyzing ? <RefreshCw className="animate-spin" size={14}/> : <Sparkles size={14}/>}
+                       {isAnalyzing ? 'Analyzing...' : 'Run Prediction'}
+                    </button>
+                 </div>
+                 
+                 {insight && (
+                    <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4">
+                       <div className="bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                          <p className="text-xs font-bold text-slate-400 uppercase">Risk Level</p>
+                          <p className={`text-2xl font-bold mt-1 ${
+                             insight.riskLevel === 'CRITICAL' ? 'text-red-400' : 
+                             insight.riskLevel === 'HIGH' ? 'text-orange-400' : 
+                             'text-emerald-400'
+                          }`}>{insight.riskLevel}</p>
+                       </div>
+                       <div className="md:col-span-2 bg-white/10 rounded-lg p-4 backdrop-blur-sm">
+                          <p className="text-xs font-bold text-slate-400 uppercase">Strategic Insight</p>
+                          <p className="text-sm mt-1 leading-relaxed text-slate-200">{insight.prediction}</p>
+                          <p className="text-xs text-brand-300 mt-2 font-medium">Rec: {insight.recommendation}</p>
+                       </div>
+                    </div>
+                 )}
+              </div>
+
               <div className="space-y-8">
                   <section>
                       <h3 className="font-bold text-lg text-slate-800 mb-2 flex items-center gap-2"><Activity size={18}/> Operational Velocity</h3>
@@ -249,36 +305,11 @@ ${analytics.teamStats.map(m => `- ${m.name}: ${m.efficiency}% Efficiency (${m.in
                           The global operating margin sits at <span className={`font-bold ${analytics.globalMargin < 20 ? 'text-red-600' : 'text-emerald-600'}`}>{analytics.globalMargin.toFixed(1)}%</span>.
                       </p>
                   </section>
-                  <section>
-                      <h3 className="font-bold text-lg text-slate-800 mb-4">Team Workload</h3>
-                      <div className="border rounded-lg overflow-hidden">
-                          <table className="w-full text-sm text-left">
-                              <thead className="bg-slate-50 text-slate-500 font-bold uppercase text-xs">
-                                  <tr>
-                                      <th className="p-3">Member</th>
-                                      <th className="p-3 text-center">Active Tasks</th>
-                                      <th className="p-3 text-center">Efficiency</th>
-                                      <th className="p-3">Focus Area</th>
-                                  </tr>
-                              </thead>
-                              <tbody className="divide-y divide-slate-100">
-                                  {analytics.teamStats.map(m => (
-                                      <tr key={m.id}>
-                                          <td className="p-3 font-medium">{m.name}</td>
-                                          <td className="p-3 text-center">{m.inProgress}</td>
-                                          <td className="p-3 text-center">{m.efficiency}%</td>
-                                          <td className="p-3 text-slate-500">{users.find(u=>u.id===m.id)?.specialty}</td>
-                                      </tr>
-                                  ))}
-                              </tbody>
-                          </table>
-                      </div>
-                  </section>
               </div>
           </div>
       ) : (
         <>
-            {/* KPI CARDS (Real Data) */}
+            {/* KPI CARDS */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <MetricTile 
                     title="Revenue Flow" 
@@ -313,8 +344,7 @@ ${analytics.teamStats.map(m => `- ${m.name}: ${m.efficiency}% Efficiency (${m.in
             {/* MAIN CANVAS */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto lg:h-[600px]">
                 
-                {/* 1. RISK MATRIX (Scatter Plot) */}
-                {/* FIXED: Enforced full height (h-full) instead of h-auto for large screens to satisfy Recharts */}
+                {/* 1. RISK MATRIX */}
                 <div className={`col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col transition-all duration-500 ${zoomedTile === 'risk' ? 'fixed inset-4 z-50 h-auto' : 'relative h-[400px] lg:h-full'}`}>
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                         <div>

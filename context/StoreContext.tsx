@@ -26,6 +26,10 @@ interface StoreContextType {
   setSearchQuery: (query: string) => void;
   isAuthenticated: boolean;
   
+  // Asset Viewing Global State
+  viewingAsset: Asset | null;
+  setViewingAsset: (asset: Asset | null) => void;
+  
   login: (email: string, password?: string, rememberMe?: boolean) => boolean;
   logout: () => void;
   checkAutoLogin: () => Promise<void>;
@@ -91,6 +95,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [chats, setChats] = useState<ChatSession[]>(MOCK_CHATS);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Global Modal States
+  const [viewingAsset, setViewingAsset] = useState<Asset | null>(null);
   
   const [userPreferences, setUserPreferences] = useState<UserPreferences>({
     theme: 'light',
@@ -382,7 +389,10 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     const newComment: AssetComment = { id: `c${Date.now()}`, userId: user.id, userName: user.name, content, timestamp: new Date().toISOString() };
     setAssets(prev => prev.map(a => a.id === assetId ? { ...a, comments: [...a.comments, newComment] } : a));
   };
-  const deleteAsset = (assetId: string) => setAssets(prev => prev.filter(a => a.id !== assetId));
+  const deleteAsset = (assetId: string) => {
+     setAssets(prev => prev.filter(a => a.id !== assetId));
+     setViewingAsset(null); // Close if open
+  };
 
   // --- PROJECT ACTIONS ---
   const updateProject = (projectId: string, updates: Partial<Project>) => setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
@@ -518,7 +528,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         case IrisActionType.CREATE_TASK:
            addTask(action.payload);
            break;
-        case IrisActionType.CREATE_USER: // ADDED
+        case IrisActionType.CREATE_USER:
            registerUser(action.payload);
            break;
         case IrisActionType.DELETE_USER:
@@ -530,15 +540,32 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         case IrisActionType.UPDATE_STATUS:
            updateTaskStatus(action.payload.taskId, action.payload.status);
            break;
+        case IrisActionType.SHOW_ASSET:
+           const query = action.payload.query.toLowerCase();
+           // Fuzzy search assets
+           const matchedAsset = assets.find(a => 
+              a.title.toLowerCase().includes(query) || 
+              a.tags?.some(t => t.toLowerCase().includes(query))
+           );
+           
+           if (matchedAsset) {
+              setViewingAsset(matchedAsset);
+              notify({ title: 'Opening Asset', message: `Found: ${matchedAsset.title}`, type: 'success', priority: 'MEDIUM' });
+           } else {
+              notify({ title: 'Asset Not Found', message: `Could not find "${action.payload.query}"`, type: 'warning', priority: 'MEDIUM' });
+           }
+           break;
         default:
            break;
      }
-     notify({
-        title: 'Iris Action Executed',
-        message: action.confirmationText,
-        type: 'info',
-        priority: 'MEDIUM'
-     });
+     if (action.type !== IrisActionType.SHOW_ASSET) {
+        notify({
+           title: 'Iris Action Executed',
+           message: action.confirmationText,
+           type: 'info',
+           priority: 'MEDIUM'
+        });
+     }
   };
 
   if (isAuthChecking) return null; 
@@ -547,6 +574,7 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     <StoreContext.Provider value={{
       user, realUser, isImpersonating, users, projects, tasks, assets, clients, notifications, chats,
       userPreferences, systemSettings, searchQuery, setSearchQuery, isAuthenticated,
+      viewingAsset, setViewingAsset,
       login, logout, checkAutoLogin, requestUserAccess, resolveAccessRequest, startImpersonation, stopImpersonation,
       registerUser, editUser, deleteUser, registerClient,
       updateTaskStatus, addTask, updateTask, deleteTask,
