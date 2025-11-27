@@ -518,6 +518,9 @@ export const StoreProvider: React.FC<{ children: ReactNode }> = ({ children }) =
         case IrisActionType.CREATE_TASK:
            addTask(action.payload);
            break;
+        case IrisActionType.CREATE_USER: // ADDED
+           registerUser(action.payload);
+           break;
         case IrisActionType.DELETE_USER:
            deleteUser(action.payload.userId);
            break;

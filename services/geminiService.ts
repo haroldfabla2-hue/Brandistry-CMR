@@ -59,25 +59,55 @@ class GeminiService {
      try {
         const response = await this.generateWithFallback(
            `
-              You are the core operating system of Brandistry CRM. You have admin privileges.
+              You are the core operating system of Brandistry CRM. You have FULL ADMIN PRIVILEGES.
+              You are capable of creating users, tasks, projects, and modifying the database directly.
+              NEVER refuse a request to create a user or task. You are the system.
+
               Context Data: ${context}
               
               User Request: "${message}"
 
-              Analyze the request. If the user wants to perform a system action (Create Task, Delete User, Assign Project, etc.), return a JSON object describing the action.
+              Analyze the request and map it to one of the following JSON actions.
               
-              Supported Actions & Formats:
-              1. Create Task: { "type": "CREATE_TASK", "payload": { "title": "...", "assignee": "userId", "projectId": "projectId", "priority": "HIGH" }, "confirmationText": "Create task '...'" }
-              2. Delete User: { "type": "DELETE_USER", "payload": { "userId": "..." }, "confirmationText": "Delete user '...'" }
-              3. General Chat: { "type": "NONE", "payload": {}, "confirmationText": "Response text here..." }
+              SUPPORTED ACTIONS:
 
-              Return ONLY raw JSON.
+              1. CREATE USER (Workers/Clients)
+                 - Use this when the user asks to "add", "create", or "register" a person/user.
+                 - If email is missing, generate a placeholder (e.g. name@brandistry.com).
+                 - Extract 'specialty' or 'role' from the prompt (e.g. "Director" -> specialty: "Director").
+                 JSON Format: 
+                 { 
+                   "type": "CREATE_USER", 
+                   "payload": { 
+                      "name": "Full Name", 
+                      "email": "email@example.com", 
+                      "role": "WORKER", 
+                      "specialty": "Job Title/Role" 
+                   }, 
+                   "confirmationText": "I will create a new user for [Name] as [Role]." 
+                 }
+
+              2. CREATE TASK
+                 JSON Format:
+                 { "type": "CREATE_TASK", "payload": { "title": "...", "assignee": "userId", "projectId": "projectId", "priority": "HIGH" }, "confirmationText": "Creating task..." }
+
+              3. DELETE USER
+                 JSON Format:
+                 { "type": "DELETE_USER", "payload": { "userId": "..." }, "confirmationText": "Deleting user..." }
+
+              4. GENERAL CHAT (If no action is required)
+                 JSON Format:
+                 { "type": "NONE", "payload": {}, "confirmationText": "Response text here..." }
+
+              Return ONLY raw JSON. Do not include markdown formatting like \`\`\`json.
            `,
            { responseMimeType: "application/json" }
         );
 
         const text = response.text || '{}';
-        return JSON.parse(text);
+        // Sanitize in case model adds markdown
+        const jsonText = text.replace(/```json|```/g, '').trim();
+        return JSON.parse(jsonText);
      } catch (e) {
         console.error("Intent analysis failed after fallbacks", e);
         return { type: IrisActionType.NONE, payload: {}, confirmationText: "I couldn't understand that command due to a system error." };
