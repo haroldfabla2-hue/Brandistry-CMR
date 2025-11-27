@@ -98,6 +98,8 @@ export const AssetBlock: React.FC<{ asset: Asset }> = ({ asset: initialAsset }) 
        <div className="h-32 bg-slate-100 relative group">
           {asset.type === AssetType.IMAGE ? (
              <img src={asset.url} className="w-full h-full object-cover" alt={asset.title}/>
+          ) : asset.type === AssetType.VIDEO ? (
+             <video src={asset.url} controls className="w-full h-full object-cover bg-black" />
           ) : (
              <div className="w-full h-full flex items-center justify-center text-slate-400">
                 {asset.type === AssetType.VIDEO ? <FileVideo size={32}/> : <FileText size={32}/>}
@@ -144,7 +146,7 @@ export const AssetBlock: React.FC<{ asset: Asset }> = ({ asset: initialAsset }) 
                   <button 
                     type="submit"
                     disabled={!feedback.trim()}
-                    className="flex-1 py-1.5 bg-red-500 text-white rounded text-xs font-bold hover:bg-red-600 transition-colors flex items-center justify-center gap-1"
+                    className="flex-1 py-1.5 bg-red-50 text-white rounded text-xs font-bold hover:bg-red-600 transition-colors flex items-center justify-center gap-1"
                   >
                      <Send size={12}/> Request Changes
                   </button>

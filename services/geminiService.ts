@@ -1,4 +1,5 @@
 
+
 import { GoogleGenAI } from "@google/genai";
 import { IrisTeamMember, ChatMessage, IrisAction, IrisActionType, GeminiModel } from "../types";
 
@@ -7,8 +8,7 @@ const API_KEY = process.env.API_KEY || '';
 // Fallback Chain: Speed -> Reliability -> Power
 const MODEL_FALLBACK_CHAIN: GeminiModel[] = [
   'gemini-2.5-flash',
-  'gemini-1.5-flash',
-  'gemini-1.5-pro'
+  'gemini-3-pro-preview'
 ];
 
 class GeminiService {

@@ -7,7 +7,7 @@ import {
 import { 
   TrendingUp, Users, CheckCircle, AlertCircle, DollarSign, Briefcase, ListTodo, 
   Calendar, Sparkles, User as UserIcon, ArrowUpRight, ArrowDownRight, Wallet,
-  Maximize2, Minimize2, Filter, RefreshCw, Search, Zap, X, Activity, Clock
+  Maximize2, Minimize2, Filter, RefreshCw, Search, Zap, X, Activity, Clock, Download
 } from 'lucide-react';
 import { Project, User, UserRole, Task, Asset, AssetStatus, TaskStatus, ProjectStatus } from '../types';
 import { GemPhotoAI } from './GemPhotoAI';
@@ -146,6 +146,34 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
      setNlQuery('');
   };
 
+  const exportReport = () => {
+     const content = `
+# Brandistry Executive Summary
+Generated: ${new Date().toLocaleString()}
+
+## Financial Health
+- Total Active Budget: $${analytics.totalBudget.toLocaleString()}
+- Total Spent: $${analytics.totalSpent.toLocaleString()}
+- Global Margin: ${analytics.globalMargin.toFixed(1)}%
+
+## Operational Velocity
+- Active Tasks (Load): ${analytics.activeLoad}
+- Assets in Review: ${analytics.reviewQueue}
+
+## Team Performance
+${analytics.teamStats.map(m => `- ${m.name}: ${m.efficiency}% Efficiency (${m.inProgress} active tasks)`).join('\n')}
+     `;
+     
+     const blob = new Blob([content], { type: 'text/markdown' });
+     const url = URL.createObjectURL(blob);
+     const a = document.createElement('a');
+     a.href = url;
+     a.download = `Brandistry_Report_${new Date().toISOString().split('T')[0]}.md`;
+     document.body.appendChild(a);
+     a.click();
+     document.body.removeChild(a);
+  };
+
   return (
     <div className={`space-y-6 animate-in fade-in duration-500 relative ${zoomedTile ? 'overflow-hidden' : ''}`}>
       
@@ -195,8 +223,15 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
 
       {viewMode === 'report' ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm max-w-4xl mx-auto">
-              <h1 className="text-3xl font-bold text-slate-900 mb-2">Executive Summary</h1>
-              <p className="text-slate-500 mb-8 border-b pb-4">Generated {new Date().toLocaleDateString()} • Real-Time Snapshot</p>
+              <div className="flex justify-between items-start mb-8 border-b pb-4">
+                 <div>
+                    <h1 className="text-3xl font-bold text-slate-900 mb-2">Executive Summary</h1>
+                    <p className="text-slate-500">Generated {new Date().toLocaleDateString()} • Real-Time Snapshot</p>
+                 </div>
+                 <button onClick={exportReport} className="flex items-center gap-2 px-4 py-2 bg-brand-50 text-brand-700 rounded-lg hover:bg-brand-100 font-medium text-sm transition-colors">
+                    <Download size={16}/> Export
+                 </button>
+              </div>
               
               <div className="space-y-8">
                   <section>
@@ -279,7 +314,8 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-auto lg:h-[600px]">
                 
                 {/* 1. RISK MATRIX (Scatter Plot) */}
-                <div className={`col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col transition-all duration-500 ${zoomedTile === 'risk' ? 'fixed inset-4 z-50 h-auto' : 'relative h-[400px] lg:h-auto'}`}>
+                {/* FIXED: Enforced full height (h-full) instead of h-auto for large screens to satisfy Recharts */}
+                <div className={`col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col transition-all duration-500 ${zoomedTile === 'risk' ? 'fixed inset-4 z-50 h-auto' : 'relative h-[400px] lg:h-full'}`}>
                     <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                         <div>
                             <h3 className="text-lg font-bold text-slate-800">Project Risk Matrix</h3>
@@ -309,7 +345,7 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
                 </div>
 
                 {/* 2. LIVE OPERATIONS FEED */}
-                <div className="col-span-1 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[400px] lg:h-auto">
+                <div className="col-span-1 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col h-[400px] lg:h-full">
                     <div className="p-6 border-b border-slate-100 bg-slate-50/50 rounded-t-2xl">
                         <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
                             <div className={`w-2 h-2 rounded-full ${analytics.activeLoad > 0 ? 'bg-green-500 animate-pulse' : 'bg-slate-300'}`}/>
@@ -332,7 +368,7 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
                                             <span className="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded">WIP</span>
                                         </div>
                                         <div className="flex items-center gap-2 mt-2">
-                                            <img src={op.assignee?.avatar} className="w-5 h-5 rounded-full border border-white shadow-sm"/>
+                                            <img src={op.assignee?.avatar} alt={op.assignee?.name} className="w-5 h-5 rounded-full border border-white shadow-sm"/>
                                             <span className="text-xs text-slate-500">{op.assignee?.name}</span>
                                             <span className="text-[10px] text-slate-300">•</span>
                                             <span className="text-xs text-slate-400 truncate max-w-[100px]">{op.project?.name}</span>
@@ -376,7 +412,15 @@ const InfiniteHorizonDashboard = ({ projects, tasks, assets, users }: { projects
   );
 };
 
-const MetricTile = ({ title, value, delta, icon, color }: any) => {
+interface MetricTileProps {
+  title: string;
+  value: string;
+  delta: string;
+  icon: React.ReactNode;
+  color: string;
+}
+
+const MetricTile = ({ title, value, delta, icon, color }: MetricTileProps) => {
     const colorStyles = {
         emerald: 'text-emerald-600 bg-emerald-50',
         blue: 'text-blue-600 bg-blue-50',
@@ -437,7 +481,7 @@ const WorkerDashboard = ({ user, projects, tasks }: { user: User, projects: Proj
            <div className="space-y-3">
              {pendingTasks.slice(0, 5).map(t => (
                <div key={t.id} className="flex items-start gap-3 p-3 bg-slate-50 rounded-lg hover:bg-slate-100 transition-colors">
-                  <div className={`w-1 h-full min-h-[40px] rounded-full ${t.priority === 'HIGH' ? 'bg-red-500' : 'bg-blue-500'}`}></div>
+                  <div className={`w-1 h-full min-h-[40px] rounded-full ${t.priority === 'HIGH' ? 'bg-red-50' : 'bg-blue-500'}`}></div>
                   <div>
                     <p className="text-sm font-medium text-slate-800 line-clamp-1">{t.title}</p>
                     <p className="text-xs text-slate-500">{new Date(t.dueDate).toLocaleDateString()}</p>

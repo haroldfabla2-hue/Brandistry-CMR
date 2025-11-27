@@ -29,7 +29,7 @@ export const AssetManager: React.FC = () => {
   const handleDownload = (asset: Asset) => {
       const link = document.createElement('a');
       link.href = asset.url;
-      link.download = `${asset.title.replace(/\s+/g, '_')}.jpg`;
+      link.download = `${asset.title.replace(/\s+/g, '_')}`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
@@ -126,13 +126,20 @@ export const AssetManager: React.FC = () => {
                       <div className={viewMode === 'grid' ? 'h-32 bg-slate-100 relative overflow-hidden' : 'w-10 h-10 bg-slate-100 rounded flex items-center justify-center shrink-0'}>
                          {asset.type === AssetType.IMAGE ? (
                            <img src={asset.url} alt={asset.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                         ) : asset.type === AssetType.VIDEO ? (
+                           <div className="w-full h-full relative">
+                              <video src={asset.url} className="w-full h-full object-cover" muted />
+                              <div className="absolute inset-0 flex items-center justify-center bg-black/20">
+                                 <FileVideo className="text-white drop-shadow-md" size={24}/>
+                              </div>
+                           </div>
                          ) : (
                            <div className="text-slate-400 flex items-center justify-center w-full h-full">
-                             {asset.type === AssetType.VIDEO ? <FileVideo /> : <FileText />}
+                             <FileText />
                            </div>
                          )}
                          {viewMode === 'grid' && (
-                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                           <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100 pointer-events-none">
                                <Eye className="text-white drop-shadow-md" size={24} />
                            </div>
                          )}
@@ -183,6 +190,8 @@ export const AssetManager: React.FC = () => {
                <div className="p-4 bg-slate-50 border-b border-slate-100 text-center relative group">
                   {selectedAsset.type === AssetType.IMAGE ? (
                      <img src={selectedAsset.url} className="max-h-48 mx-auto rounded shadow-sm border border-slate-200 object-contain bg-white" alt="Preview"/>
+                  ) : selectedAsset.type === AssetType.VIDEO ? (
+                     <video src={selectedAsset.url} controls className="max-h-48 mx-auto rounded shadow-sm border border-slate-200 bg-black w-full" />
                   ) : (
                      <div className="h-32 flex flex-col items-center justify-center text-slate-400 border border-dashed border-slate-300 rounded bg-slate-100">
                         <FileText size={32}/>

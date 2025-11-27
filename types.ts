@@ -1,4 +1,5 @@
 
+
 export enum UserRole {
   ADMIN = 'ADMIN',
   WORKER = 'WORKER',
@@ -278,4 +279,4 @@ export interface GoogleFile {
   modifiedTime: string;
 }
 
-export type GeminiModel = 'gemini-2.5-flash' | 'gemini-1.5-flash' | 'gemini-1.5-pro' | 'gemini-2.5-flash-image';
+export type GeminiModel = 'gemini-2.5-flash' | 'gemini-3-pro-preview' | 'gemini-flash-lite-latest' | 'gemini-2.5-flash-image';

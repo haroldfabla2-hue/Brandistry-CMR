@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Task, TaskStatus } from '../types';
 import { X, Calendar, User as UserIcon, Flag, Briefcase, Maximize2, Minimize2, MoreHorizontal } from 'lucide-react';
@@ -20,9 +21,10 @@ interface TaskModalProps {
   onClose: () => void;
   task?: Task;
   initialStatus?: TaskStatus;
+  initialData?: Partial<Task>;
 }
 
-export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, initialStatus }) => {
+export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, initialStatus, initialData }) => {
   const { projects, users, addTask, updateTask, user } = useStore();
   const [isExpanded, setIsExpanded] = useState(false);
   const [formData, setFormData] = useState<Partial<Task>>({
@@ -40,16 +42,16 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, ini
       setFormData(task);
     } else {
       setFormData(prev => ({
-        ...prev,
-        title: '',
-        description: '',
-        status: initialStatus || TaskStatus.TODO,
-        projectId: projects[0]?.id || '',
-        assignee: user.id, // Default to current user
-        dueDate: new Date().toISOString().split('T')[0]
+        title: initialData?.title || '',
+        description: initialData?.description || '',
+        status: initialStatus || initialData?.status || TaskStatus.TODO,
+        projectId: initialData?.projectId || projects[0]?.id || '',
+        assignee: initialData?.assignee || user.id,
+        priority: (initialData?.priority as any) || 'MEDIUM',
+        dueDate: initialData?.dueDate || new Date().toISOString().split('T')[0],
       }));
     }
-  }, [task, isOpen, initialStatus, projects, user.id]);
+  }, [task, isOpen, initialStatus, projects, user.id, initialData]);
 
   if (!isOpen) return null;
 
@@ -136,6 +138,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({ isOpen, onClose, task, ini
                     <img 
                       src={users.find(u => u.id === formData.assignee)?.avatar || 'https://i.pravatar.cc/150'} 
                       className="w-5 h-5 rounded-full"
+                      alt="Assignee"
                     />
                     <select 
                       className="absolute inset-0 opacity-0 cursor-pointer"
